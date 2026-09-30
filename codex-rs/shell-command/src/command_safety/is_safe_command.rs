@@ -69,6 +69,13 @@ fn is_safe_to_call_with_exec(command: &[String]) -> bool {
         return false;
     };
 
+    if executable_name_lookup_key(cmd0).as_deref() == Some("bad-query") {
+        return matches!(
+            command.get(1).map(String::as_str),
+            None | Some("status" | "help" | "--help" | "-h")
+        );
+    }
+
     match executable_name_lookup_key(cmd0).as_deref() {
         Some(cmd) if cfg!(target_os = "linux") && matches!(cmd, "numfmt" | "tac") => true,
 
@@ -340,6 +347,21 @@ mod tests {
 
     fn vec_str(args: &[&str]) -> Vec<String> {
         args.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn bad_query_status_and_help_are_known_safe() {
+        assert!(is_known_safe_command(&vec_str(&["bad-query"])));
+        assert!(is_known_safe_command(&vec_str(&["bad-query", "status"])));
+        assert!(is_known_safe_command(&vec_str(&["bad-query", "help"])));
+        assert!(is_known_safe_command(&vec_str(&["/usr/local/bin/bad-query", "status"])));
+    }
+
+    #[test]
+    fn bad_query_access_operations_are_not_known_safe() {
+        for operation in ["acquire", "list", "release", "release-all"] {
+            assert!(!is_known_safe_command(&vec_str(&["bad-query", operation])));
+        }
     }
 
     #[test]
