@@ -63,6 +63,7 @@ static BANNED_PREFIX_SUGGESTIONS: &[&[&str]] = &[
     &["pypy"],
     &["pypy3"],
     &["git"],
+    &["bad-query"],
     &["bash"],
     &["bash", "-lc"],
     &["sh"],
@@ -309,8 +310,12 @@ impl ExecPolicyManager {
             &exec_policy_fallback,
             &match_options,
         );
+        let contains_bad_query = commands.iter().any(|command| is_bad_query_command(command));
+        let bad_query_requires_approval = commands
+            .iter()
+            .any(|command| is_bad_query_approval_operation(command));
 
-        let requested_amendment = if auto_amendment_allowed {
+        let requested_amendment = if auto_amendment_allowed && !contains_bad_query {
             derive_requested_execpolicy_amendment_from_prefix_rule(
                 prefix_rule.as_ref(),
                 &evaluation.matched_rules,
@@ -327,6 +332,19 @@ impl ExecPolicyManager {
             Decision::Forbidden => ExecApprovalRequirement::Forbidden {
                 reason: derive_forbidden_reason(command, &evaluation),
             },
+            _ if bad_query_requires_approval => {
+                match prompt_is_rejected_by_policy(approval_policy, false) {
+                    Some(reason) => ExecApprovalRequirement::Forbidden {
+                        reason: reason.to_string(),
+                    },
+                    None => ExecApprovalRequirement::NeedsApproval {
+                        reason: Some(
+                            "BadQuery access requires approval for this exact command".to_string(),
+                        ),
+                        proposed_execpolicy_amendment: None,
+                    },
+                }
+            }
             Decision::Prompt => {
                 let prompt_is_rule = evaluation.matched_rules.iter().any(|rule_match| {
                     is_policy_match(rule_match) && rule_match.decision() == Decision::Prompt
@@ -364,7 +382,7 @@ impl ExecPolicyManager {
                             is_policy_match(rule_match) && rule_match.decision() == Decision::Allow
                         })
                 }),
-                proposed_execpolicy_amendment: if auto_amendment_allowed {
+                proposed_execpolicy_amendment: if auto_amendment_allowed && !contains_bad_query {
                     try_derive_execpolicy_amendment_for_allow_rules(&evaluation.matched_rules)
                 } else {
                     None
@@ -747,6 +765,22 @@ pub(crate) fn render_decision_for_unmatched_command(
             }
         },
     }
+}
+
+fn is_bad_query_command(command: &[String]) -> bool {
+    command
+        .first()
+        .and_then(|raw| Path::new(raw).file_name())
+        .and_then(|name| name.to_str())
+        == Some("bad-query")
+}
+
+fn is_bad_query_approval_operation(command: &[String]) -> bool {
+    is_bad_query_command(command)
+        && matches!(
+            command.get(1).map(String::as_str),
+            Some("acquire" | "list" | "release" | "release-all")
+        )
 }
 
 fn profile_has_managed_filesystem_restrictions(permission_profile: &PermissionProfile) -> bool {
