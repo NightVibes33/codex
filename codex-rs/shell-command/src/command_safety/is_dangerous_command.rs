@@ -142,7 +142,25 @@ pub(crate) fn find_git_subcommand<'a>(
     None
 }
 
+fn is_bad_query_approval_command(command: &[String]) -> bool {
+    let Some(cmd0) = command.first() else {
+        return false;
+    };
+    if executable_name_lookup_key(cmd0).as_deref() != Some("bad-query") {
+        return false;
+    }
+
+    matches!(
+        command.get(1).map(String::as_str),
+        Some("acquire" | "list" | "release" | "release-all")
+    )
+}
+
 fn is_dangerous_to_call_with_exec(command: &[String]) -> bool {
+    if is_bad_query_approval_command(command) {
+        return true;
+    }
+
     let cmd0 = command.first().map(String::as_str);
 
     match cmd0 {
@@ -162,6 +180,24 @@ mod tests {
 
     fn vec_str(items: &[&str]) -> Vec<String> {
         items.iter().map(std::string::ToString::to_string).collect()
+    }
+
+    #[test]
+    fn bad_query_access_operations_are_dangerous() {
+        for operation in ["acquire", "list", "release", "release-all"] {
+            assert!(command_might_be_dangerous(&vec_str(&["bad-query", operation])));
+            assert!(command_might_be_dangerous(&vec_str(&[
+                "/usr/local/bin/bad-query",
+                operation,
+            ])));
+        }
+    }
+
+    #[test]
+    fn bad_query_read_only_operations_are_not_dangerous() {
+        for operation in ["status", "help", "--help", "-h"] {
+            assert!(!command_might_be_dangerous(&vec_str(&["bad-query", operation])));
+        }
     }
 
     #[test]
