@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: extract-real-chatgpt-startup-modules
+  cancel-in-progress: true
+
 jobs:
   extract:
     runs-on: ubuntu-latest
