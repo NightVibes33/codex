@@ -1,0 +1,34 @@
+name: Smoke real ChatGPT on High Sierra Electron
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/smoke-chatgpt-electron26.sh"
+      - ".github/workflows/high-sierra-chatgpt-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  real-app-electron26-smoke:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boot real OpenAI ChatGPT payload on Electron 26
+        run: bash scripts/smoke-chatgpt-electron26.sh "$RUNNER_TEMP/chatgpt-electron26-smoke"
+
+      - name: Upload compatibility logs only
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-electron26-real-app-smoke
+          path: |
+            ${{ runner.temp }}/chatgpt-electron26-smoke/build-info.txt
+            ${{ runner.temp }}/chatgpt-electron26-smoke/app-asar-sha256.txt
+            ${{ runner.temp }}/chatgpt-electron26-smoke/real-app-package.json
+            ${{ runner.temp }}/chatgpt-electron26-smoke/stdout.log
+            ${{ runner.temp }}/chatgpt-electron26-smoke/stderr.log
+          if-no-files-found: warn
