@@ -249,6 +249,8 @@ if [[ "${CHATGPT_HIGH_SIERRA_NO_LAUNCH:-0}" == "1" ]]; then
   exit 0
 fi
 
-echo
-echo "Launching ChatGPT..."
-open "$DEST"
+if [[ "${CHATGPT_HIGH_SIERRA_NO_LAUNCH:-0}" != "1" ]]; then
+  echo
+  echo "Launching ChatGPT..."
+  open "$DEST"
+fi
