@@ -183,6 +183,24 @@ const electron = require("electron");
 const { app, session, BrowserWindow } = electron;
 
 const originalApp = path.join(process.resourcesPath, "original.asar");
+const compatPackage = require("./package.json");
+
+// OpenAI's build-flavor resolver normally reads Resources/app.asar/package.json.
+// The compatibility bootstrap must occupy that Electron entrypoint, so the
+// untouched OpenAI payload lives at original.asar. Feed the same official
+// metadata through the resolver's supported environment path.
+if (!process.env.BUILD_FLAVOR) {
+  process.env.BUILD_FLAVOR = compatPackage.codexBuildFlavor || "prod";
+}
+if (!process.env.CODEX_APP_VERSION) {
+  process.env.CODEX_APP_VERSION = compatPackage.version;
+}
+if (!process.env.CODEX_BUILD_NUMBER) {
+  process.env.CODEX_BUILD_NUMBER = String(compatPackage.codexBuildNumber || "");
+}
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = "production";
+}
 
 // OpenAI's current desktop payload checks for the Owl shell's native
 // app.showTaskManager API before loading the main app. Electron 26 predates
