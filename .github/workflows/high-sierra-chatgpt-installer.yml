@@ -102,6 +102,7 @@ PY
           test -x "$app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
           "$app/Contents/Resources/codex-cli/bin/codex" --version
 
+          CODEX_CLI_PATH="$app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex" \
           "$app/Contents/MacOS/Electron" \
             --remote-debugging-port=9231 \
             --disable-gpu \
