@@ -14,8 +14,8 @@ rm -rf "$OUT" "$WORK"
 mkdir -p "$OUT" "$WORK"
 
 cd "$ROOT/codex-rs"
-cargo build --locked --release --target "$TARGET" -p codex-cli --bin codex
-cargo build --locked --release --target "$TARGET" -p codex-code-mode-host --bin codex-code-mode-host
+cargo build --release --target "$TARGET" -p codex-cli --bin codex
+cargo build --release --target "$TARGET" -p codex-code-mode-host --bin codex-code-mode-host
 
 RG_ROOT="$WORK/rg-root"
 cargo install ripgrep --version 14.1.1 --locked --root "$RG_ROOT" --target "$TARGET"
