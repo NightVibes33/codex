@@ -83,6 +83,29 @@ while IFS= read -r member; do
   rm -rf "$work"
 done < <(grep -E 'build-flavor-.*\.js$' "$OUT/asar-list.txt" || true)
 
+extract_named() {
+  local member="$1"
+  local destination="$2"
+  local work
+  local name
+  work="$(mktemp -d "$TMP/extract-named.XXXXXX")"
+  name="$(basename "$member")"
+  (
+    cd "$work"
+    npx --yes @electron/asar@3 extract-file "$TMP/app.asar" "$member"
+  )
+  if [[ -s "$work/$name" ]]; then
+    cp "$work/$name" "$OUT/$destination"
+    echo "extracted=$member as=$destination bytes=$(wc -c < "$OUT/$destination")" | tee -a "$OUT/source.txt"
+  fi
+  rm -rf "$work"
+}
+
+extract_named 'node_modules/better-sqlite3/.codex-native-module-build.json' 'better-sqlite3-native-build.json'
+extract_named 'node_modules/better-sqlite3/package.json' 'better-sqlite3-package.json'
+extract_named 'node_modules/node-pty/.codex-native-module-build.json' 'node-pty-native-build.json'
+extract_named 'node_modules/node-pty/package.json' 'node-pty-package.json'
+
 echo "--- extracted files ---"
 wc -c "$OUT"/* 2>/dev/null || true
 echo "--- package metadata ---"
