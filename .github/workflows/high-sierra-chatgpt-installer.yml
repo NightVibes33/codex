@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "scripts/install-chatgpt-high-sierra.sh"
+      - "scripts/probe-chatgpt-app-server.py"
       - ".github/workflows/high-sierra-chatgpt-installer.yml"
   workflow_dispatch:
 
