@@ -1,0 +1,47 @@
+name: Build Electron 26 native modules
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/build-electron26-native-modules.sh"
+      - ".github/workflows/electron26-native-modules.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: electron26-native-modules
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.13"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Build Electron 26 native compatibility pack
+        run: bash scripts/build-electron26-native-modules.sh "$RUNNER_TEMP/native"
+      - name: Inspect native binaries
+        run: |
+          file "$RUNNER_TEMP/native/better-sqlite3/build/Release/better_sqlite3.node"
+          file "$RUNNER_TEMP/native/node-pty/build/Release/pty.node"
+          otool -L "$RUNNER_TEMP/native/better-sqlite3/build/Release/better_sqlite3.node"
+          otool -L "$RUNNER_TEMP/native/node-pty/build/Release/pty.node"
+          cat "$RUNNER_TEMP/native/BUILD-INFO.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: electron26-native-darwin-x64
+          path: |
+            ${{ runner.temp }}/native/electron26-native-darwin-x64.tar.gz
+            ${{ runner.temp }}/native/SHA256SUMS
+            ${{ runner.temp }}/native/BUILD-INFO.txt
+          if-no-files-found: error
