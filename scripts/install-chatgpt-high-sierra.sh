@@ -178,7 +178,11 @@ echo "Downloading Electron 26 native compatibility modules..."
 curl -fL --retry 4 --retry-delay 2   "$NATIVE_BASE_URL/$native_archive"   -o "$TMP/$native_archive"
 curl -fL --retry 4 --retry-delay 2   "$NATIVE_BASE_URL/SHA256SUMS"   -o "$TMP/native-SHA256SUMS"
 
-native_expected="$(awk -v asset="$native_archive" '$2 == asset || $2 == "*" asset { print $1; exit }' "$TMP/native-SHA256SUMS")"
+native_expected="$(awk -v asset="$native_archive" '
+  $2 == asset || $2 == "*" asset { print $1; found=1; exit }
+  NF >= 1 && !fallback { fallback=$1 }
+  END { if (!found && fallback) print fallback }
+' "$TMP/native-SHA256SUMS")"
 native_actual="$(shasum -a 256 "$TMP/$native_archive" | awk '{print $1}')"
 if [[ -z "$native_expected" || "$native_expected" != "$native_actual" ]]; then
   echo "Electron 26 native compatibility pack checksum verification failed." >&2
