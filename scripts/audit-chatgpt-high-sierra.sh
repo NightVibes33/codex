@@ -41,10 +41,14 @@ MAIN="$(find "$MACOS" -type f -perm +111 -maxdepth 1 -print -quit)"
   echo "Audit date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo
   echo "## Bundle metadata"
-  for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion LSMinimumSystemVersion CFBundleExecutable; do
+  for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion LSMinimumSystemVersion CFBundleExecutable SUFeedURL SUScheduledCheckInterval SUEnableAutomaticChecks; do
     value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$INFO" 2>/dev/null || true)"
     printf '%s: %s\n' "$key" "$value"
   done
+
+  echo
+  echo "## Updater-related Info.plist keys"
+  plutil -p "$INFO" | grep -Ei 'sparkle|feed|update|SU[A-Z]' || true
   echo
   echo "## Main executable"
   file "$MAIN"
