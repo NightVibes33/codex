@@ -46,7 +46,7 @@ jobs:
       - name: Inspect linked libraries
         run: |
           otool -L dist/high-sierra/codex-high-sierra-x86_64/bin/codex
-          otool -L dist/high-sierra/codex-high-sierra-x86_64/bin/codex-code-mode-host
+          otool -L dist/high-sierra/codex-high-sierra-x86_64/codex-path/rg
           file dist/high-sierra/codex-high-sierra-x86_64/bin/codex
 
       - name: Upload workflow artifact
