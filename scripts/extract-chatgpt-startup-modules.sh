@@ -30,12 +30,36 @@ ASAR_PATH="$(unzip -Z1 "$TMP/ChatGPT.zip" | grep -E '/Contents/Resources/app\.as
 unzip -p "$TMP/ChatGPT.zip" "$ASAR_PATH" > "$TMP/app.asar"
 
 npx --yes @electron/asar@3 list "$TMP/app.asar" > "$OUT/asar-list.txt"
-for pattern in 'application-network-startup-.*\.js$' 'startup-requirements-.*\.js$' 'early-bootstrap\.js$'; do
+EXTRACTED="$TMP/asar"
+mkdir -p "$EXTRACTED"
+npx --yes @electron/asar@3 extract "$TMP/app.asar" "$EXTRACTED"
+
+for pattern in 'application-network-startup-.*\.js
+echo "--- startup-requirements ---"
+cat "$OUT"/startup-requirements-*.js 2>/dev/null || true
+echo
+echo "--- application-network-startup ---"
+cat "$OUT"/application-network-startup-*.js 2>/dev/null || true
+ 'startup-requirements-.*\.js
+echo "--- startup-requirements ---"
+cat "$OUT"/startup-requirements-*.js 2>/dev/null || true
+echo
+echo "--- application-network-startup ---"
+cat "$OUT"/application-network-startup-*.js 2>/dev/null || true
+ 'early-bootstrap\.js
+echo "--- startup-requirements ---"
+cat "$OUT"/startup-requirements-*.js 2>/dev/null || true
+echo
+echo "--- application-network-startup ---"
+cat "$OUT"/application-network-startup-*.js 2>/dev/null || true
+; do
   while IFS= read -r p; do
     clean="${p#/}"
     [[ -n "$clean" ]] || continue
     name="$(basename "$clean")"
-    npx --yes @electron/asar@3 extract-file "$TMP/app.asar" "$clean" > "$OUT/$name"
+    src="$EXTRACTED/$clean"
+    [[ -s "$src" ]] || { echo "extracted ASAR member is missing/empty: $clean" >&2; exit 1; }
+    cp "$src" "$OUT/$name"
     echo "extracted=$clean" | tee -a "$OUT/source.txt"
   done < <(grep -E "$pattern" "$OUT/asar-list.txt" || true)
 done
