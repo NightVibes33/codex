@@ -449,28 +449,11 @@ if (process.env.CHATGPT_HIGH_SIERRA_DIAGNOSTICS === "1") {
     const loaded = originalLoad.apply(this, arguments);
     if (
       typeof request === "string" &&
-      request.includes("startup-requirements-") &&
-      loaded &&
-      loaded.n &&
-      typeof loaded.n.initializeNodeNetworkPermissions === "function" &&
-      !loaded.n.__highSierraWrapped
+      (request.includes("startup-requirements-") ||
+       request.includes("bootstrap-") ||
+       request.includes("main-"))
     ) {
-      const namespace = loaded.n;
-      const originalInitialize = namespace.initializeNodeNetworkPermissions;
-      try {
-        Object.defineProperty(namespace, "__highSierraWrapped", { value: true });
-      } catch {}
-      namespace.initializeNodeNetworkPermissions = async function (...args) {
-        dump("initializeNodeNetworkPermissions:start", request);
-        try {
-          const result = await originalInitialize.apply(this, args);
-          dump("initializeNodeNetworkPermissions:result", result);
-          return result;
-        } catch (error) {
-          dump("initializeNodeNetworkPermissions:error", error);
-          throw error;
-        }
-      };
+      dump("module-loaded", request);
     }
     return loaded;
   };
