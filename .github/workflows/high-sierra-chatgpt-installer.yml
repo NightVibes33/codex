@@ -52,10 +52,11 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.openai.codex"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist")" = "10.13"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")" = "Electron"
-          test -f "$app/Contents/Resources/app.asar"
+          test -f "$app/Contents/Resources/original.asar"\n          test -f "$app/Contents/Resources/app/main.cjs"
           test -x "$app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
           "$app/Contents/Resources/codex-cli/bin/codex" --version
 
+          CHATGPT_HIGH_SIERRA_DIAGNOSTICS=1 \
           CODEX_CLI_PATH="$app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex" \
           "$app/Contents/MacOS/Electron" \
             --remote-debugging-port=9231 \
