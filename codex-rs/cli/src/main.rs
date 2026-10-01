@@ -900,6 +900,11 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
 
 /// Run the update action and print the result.
 fn run_update_action(action: UpdateAction) -> anyhow::Result<()> {
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    if macos_needs_legacy_backport() {
+        return run_legacy_macos_update();
+    }
+
     println!();
     let cmd_str = action.command_str();
     println!("Updating Codex via `{cmd_str}`...");
@@ -965,7 +970,52 @@ fn resolve_windows_update_command_from_path(
         .ok_or_else(|| anyhow::anyhow!("could not find update command `{command}` on PATH"))
 }
 
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+fn macos_needs_legacy_backport() -> bool {
+    let Ok(output) = std::process::Command::new("/usr/bin/sw_vers")
+        .arg("-productVersion")
+        .output()
+    else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let version = String::from_utf8_lossy(&output.stdout);
+    let mut parts = version.trim().split('.');
+    let Some(major) = parts.next().and_then(|part| part.parse::<u32>().ok()) else {
+        return false;
+    };
+    let minor = parts
+        .next()
+        .and_then(|part| part.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    matches!(major, 11) || (major == 10 && (13..=15).contains(&minor))
+}
+
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+fn run_legacy_macos_update() -> anyhow::Result<()> {
+    const INSTALLER_URL: &str =
+        "https://raw.githubusercontent.com/NightVibes33/codex/main/scripts/install-high-sierra.sh";
+    println!("Updating the High Sierra-compatible Codex build...");
+    let command = format!("curl -fsSL {INSTALLER_URL} | /bin/sh");
+    let status = std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(command)
+        .status()?;
+    if !status.success() {
+        anyhow::bail!("High Sierra Codex updater failed with status {status}");
+    }
+    Ok(())
+}
+
 fn run_update_command() -> anyhow::Result<()> {
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    if macos_needs_legacy_backport() {
+        return run_legacy_macos_update();
+    }
+
     #[cfg(debug_assertions)]
     {
         anyhow::bail!(

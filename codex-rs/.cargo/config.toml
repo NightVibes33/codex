@@ -9,3 +9,8 @@ rustflags = ["-C", "link-arg=/STACK:8388608", "-C", "link-arg=/arm64hazardfree"]
 
 [target.'cfg(all(windows, target_env = "gnu"))']
 rustflags = ["-C", "link-arg=-Wl,--stack,8388608"]
+
+# NightVibes33 High Sierra backport: keep Intel Codex link-compatible with macOS 10.13.
+# C/C++ dependencies receive the matching deployment target from the build script/workflow.
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-mmacosx-version-min=10.13"]

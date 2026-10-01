@@ -13,6 +13,17 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 
 ### Installing and running Codex CLI
 
+### macOS 10.13 High Sierra (Intel backport)
+
+This fork publishes an x86_64 build with a macOS 10.13 deployment target. On High Sierra, install or update it with:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/NightVibes33/codex/main/scripts/install-high-sierra.sh | sh
+```
+
+The installer keeps the package under `~/.codex-high-sierra`, installs the `codex` launcher in `~/.local/bin`, and keeps `codex update` on the High Sierra-compatible release channel.
+
+
 Run the following on Mac or Linux to install Codex CLI:
 
 ```shell

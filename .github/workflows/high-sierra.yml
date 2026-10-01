@@ -1,0 +1,84 @@
+name: High Sierra backport
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "codex-rs/**"
+      - "scripts/build-high-sierra.sh"
+      - "scripts/install-high-sierra.sh"
+      - ".github/workflows/high-sierra.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: high-sierra-backport
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.13"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.95.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: codex-rs -> target
+          cache-on-failure: true
+
+      - name: Build High Sierra package
+        run: bash scripts/build-high-sierra.sh
+
+      - name: Inspect linked libraries
+        run: |
+          otool -L dist/high-sierra/codex-high-sierra-x86_64/bin/codex
+          otool -L dist/high-sierra/codex-high-sierra-x86_64/bin/codex-code-mode-host
+          file dist/high-sierra/codex-high-sierra-x86_64/bin/codex
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-high-sierra-x86_64
+          path: |
+            dist/high-sierra/codex-high-sierra-x86_64.tar.gz
+            dist/high-sierra/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publish rolling High Sierra release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="high-sierra-latest"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" \
+              --title "Codex for macOS 10.13 High Sierra (rolling)" \
+              --prerelease \
+              --notes "Intel x86_64 Codex backport built with MACOSX_DEPLOYMENT_TARGET=10.13."
+          fi
+
+          gh release upload "$tag" \
+            dist/high-sierra/codex-high-sierra-x86_64.tar.gz \
+            dist/high-sierra/SHA256SUMS \
+            --clobber
