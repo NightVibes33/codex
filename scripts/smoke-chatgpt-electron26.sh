@@ -251,6 +251,20 @@ dump("versions", process.versions);
 dump("resourcesPath", process.resourcesPath);
 dump("argv", process.argv);
 
+// Capture errors that OpenAI intentionally handles internally. The real early
+// bootstrap uses Promise.catch(...) before logging and app.exit(1), so normal
+// uncaughtException/unhandledRejection hooks never see this failure.
+const originalPromiseCatch = Promise.prototype.catch;
+Promise.prototype.catch = function (handler) {
+  if (typeof handler !== "function") {
+    return originalPromiseCatch.call(this, handler);
+  }
+  return originalPromiseCatch.call(this, (error) => {
+    dump("promise-caught-error", error && (error.stack || error));
+    return handler(error);
+  });
+};
+
 // Observe the real OpenAI startup modules without replacing their behavior.
 const Module = require("node:module");
 const electron = require("electron");
