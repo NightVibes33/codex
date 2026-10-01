@@ -151,11 +151,14 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 # Prove the OpenAI application payload itself was not replaced.
 shasum -a 256 "$SOURCE_RES/app.asar" "$APP/Contents/Resources/app.asar" > "$OUT/app-asar-sha256.txt"
 
-# Extract the real app only inside this ephemeral runner for diagnostics.
-npx --yes @electron/asar@3 extract "$SOURCE_RES/app.asar" "$ASAR_ROOT" >/dev/null
-cp "$ASAR_ROOT/package.json" "$OUT/real-app-package.json"
+# Read only the two real OpenAI ASAR files needed for diagnostics. Avoid
+# extracting the entire application payload on every compatibility smoke.
+npx --yes @electron/asar@3 extract-file "$SOURCE_RES/app.asar" package.json \
+  > "$OUT/real-app-package.json"
+npx --yes @electron/asar@3 extract-file "$SOURCE_RES/app.asar" .vite/build/early-bootstrap.js \
+  > "$TMP/early-bootstrap.js"
 
-python3 - "$ASAR_ROOT/.vite/build/early-bootstrap.js" "$OUT/early-bootstrap-signals.txt" <<'PY'
+python3 - "$TMP/early-bootstrap.js" "$OUT/early-bootstrap-signals.txt" <<'PY'
 import re, sys
 src, out = sys.argv[1:3]
 text = open(src, "r", encoding="utf-8", errors="replace").read()
