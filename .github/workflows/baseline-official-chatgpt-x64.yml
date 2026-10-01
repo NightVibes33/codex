@@ -1,0 +1,27 @@
+name: Baseline official ChatGPT x64 renderer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/baseline-official-chatgpt-x64.sh"
+      - ".github/workflows/baseline-official-chatgpt-x64.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require renderer from unmodified official ChatGPT
+        run: bash scripts/baseline-official-chatgpt-x64.sh "$RUNNER_TEMP/official-baseline"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-chatgpt-x64-baseline
+          path: ${{ runner.temp }}/official-baseline/*
+          if-no-files-found: warn
