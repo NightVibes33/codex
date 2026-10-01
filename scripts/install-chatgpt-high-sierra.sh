@@ -423,22 +423,91 @@ if (!String.prototype.toWellFormed) {
 app.setAppPath(originalApp);
 
 if (process.env.CHATGPT_HIGH_SIERRA_DIAGNOSTICS === "1") {
+  const Module = require("node:module");
+  const originalLoad = Module._load;
   const originalCatch = Promise.prototype.catch;
+
+  const dump = (label, value) => {
+    try {
+      console.error(
+        "[high-sierra-compat]",
+        label,
+        value instanceof Error ? value.stack || value.message : value
+      );
+    } catch {}
+  };
+
   Promise.prototype.catch = function (handler) {
     if (typeof handler !== "function") return originalCatch.call(this, handler);
     return originalCatch.call(this, (error) => {
-      try {
-        console.error("[high-sierra-compat] caught", error && (error.stack || error));
-      } catch {}
+      dump("caught", error);
       return handler(error);
     });
   };
+
+  Module._load = function (request, parent, isMain) {
+    const loaded = originalLoad.apply(this, arguments);
+    if (
+      typeof request === "string" &&
+      request.includes("startup-requirements-") &&
+      loaded &&
+      loaded.n &&
+      typeof loaded.n.initializeNodeNetworkPermissions === "function" &&
+      !loaded.n.__highSierraWrapped
+    ) {
+      const namespace = loaded.n;
+      const originalInitialize = namespace.initializeNodeNetworkPermissions;
+      try {
+        Object.defineProperty(namespace, "__highSierraWrapped", { value: true });
+      } catch {}
+      namespace.initializeNodeNetworkPermissions = async function (...args) {
+        dump("initializeNodeNetworkPermissions:start", request);
+        try {
+          const result = await originalInitialize.apply(this, args);
+          dump("initializeNodeNetworkPermissions:result", result);
+          return result;
+        } catch (error) {
+          dump("initializeNodeNetworkPermissions:error", error);
+          throw error;
+        }
+      };
+    }
+    return loaded;
+  };
+
+  for (const method of ["showMessageBox", "showMessageBoxSync", "showErrorBox"]) {
+    if (electron.dialog && typeof electron.dialog[method] === "function") {
+      const original = electron.dialog[method].bind(electron.dialog);
+      electron.dialog[method] = (...args) => {
+        dump("dialog:" + method, args);
+        return original(...args);
+      };
+    }
+  }
+
+  for (const method of ["exit", "relaunch", "quit"]) {
+    if (typeof app[method] === "function") {
+      const original = app[method].bind(app);
+      app[method] = (...args) => {
+        dump("app:" + method, args);
+        return original(...args);
+      };
+    }
+  }
+
+  app.on("browser-window-created", (_event, win) => {
+    dump("browser-window-created", {
+      id: win && win.id,
+      destroyed: win && win.isDestroyed && win.isDestroyed(),
+    });
+  });
+
   process.on("uncaughtException", (error) => {
-    console.error("[high-sierra-compat] uncaught", error && (error.stack || error));
+    dump("uncaught", error);
     throw error;
   });
   process.on("unhandledRejection", (error) => {
-    console.error("[high-sierra-compat] unhandled", error && (error.stack || error));
+    dump("unhandled", error);
   });
 }
 
