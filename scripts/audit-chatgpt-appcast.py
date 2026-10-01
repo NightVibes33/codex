@@ -2,7 +2,8 @@
 import urllib.request, xml.etree.ElementTree as ET
 
 URL="https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml"
-data=urllib.request.urlopen(URL, timeout=60).read()
+req=urllib.request.Request(URL, headers={"User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15"})
+data=urllib.request.urlopen(req, timeout=60).read()
 print("appcast_bytes=", len(data))
 root=ET.fromstring(data)
 SPARKLE="{http://www.andymatuschak.org/xml-namespaces/sparkle}"
