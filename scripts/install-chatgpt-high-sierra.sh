@@ -108,9 +108,23 @@ source_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString'
 source_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$SOURCE_APP/Contents/Info.plist")"
 
 echo "Downloading Electron $ELECTRON_VERSION (last Electron line supporting macOS 10.13)..."
-curl -fL --retry 4 --retry-delay 2 \
-  "https://github.com/electron/electron/releases/download/v$ELECTRON_VERSION/electron-v$ELECTRON_VERSION-darwin-x64.zip" \
-  -o "$TMP/Electron.zip"
+electron_url="https://github.com/electron/electron/releases/download/v$ELECTRON_VERSION/electron-v$ELECTRON_VERSION-darwin-x64.zip"
+electron_downloaded=0
+attempt=1
+while [[ "$attempt" -le 10 ]]; do
+  if curl -fL --connect-timeout 30 --max-time 300 "$electron_url" -o "$TMP/Electron.zip"; then
+    electron_downloaded=1
+    break
+  fi
+  echo "Electron download attempt $attempt failed; retrying..." >&2
+  rm -f "$TMP/Electron.zip"
+  sleep 3
+  attempt=$((attempt + 1))
+done
+if [[ "$electron_downloaded" != "1" ]]; then
+  echo "Failed to download Electron $ELECTRON_VERSION after 10 attempts." >&2
+  exit 1
+fi
 ditto -x -k "$TMP/Electron.zip" "$ELECTRON_DIR"
 
 if [[ ! -d "$ELECTRON_DIR/Electron.app" ]]; then
