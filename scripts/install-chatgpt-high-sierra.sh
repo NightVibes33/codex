@@ -178,6 +178,18 @@ const { app } = require("electron");
 
 const originalApp = path.join(process.resourcesPath, "original.asar");
 
+// OpenAI's current desktop payload checks for the Owl shell's native
+// app.showTaskManager API before loading the main app. Electron 26 predates
+// Owl, so provide the compatibility surface while leaving OpenAI's code and UI
+// untouched. The task-manager command is non-essential on High Sierra.
+if (typeof app.showTaskManager !== "function") {
+  Object.defineProperty(app, "showTaskManager", {
+    configurable: true,
+    enumerable: false,
+    value() {},
+  });
+}
+
 // Runtime-only ECMAScript compatibility for Electron 26 / Node 18. These
 // helpers match later platform semantics closely enough for OpenAI's current
 // desktop bootstrap while leaving the real OpenAI app payload untouched.
