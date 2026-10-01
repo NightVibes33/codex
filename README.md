@@ -24,6 +24,15 @@ curl -fsSL https://raw.githubusercontent.com/NightVibes33/codex/main/scripts/ins
 The installer keeps the package under `~/.codex-high-sierra`, installs the `codex` launcher in `~/.local/bin`, and keeps `codex update` on the High Sierra-compatible release channel.
 
 
+For the real OpenAI ChatGPT/Codex desktop app on Intel High Sierra:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/NightVibes33/codex/main/scripts/install-chatgpt-high-sierra.sh | bash
+```
+
+The desktop installer reads OpenAI's official x64 appcast, downloads the current official ChatGPT/Codex app payload directly from OpenAI, and runs that payload on the final Electron 26 runtime line compatible with macOS 10.13. It installs to `~/Applications/ChatGPT.app`. On Intel macOS 10.13–12, `codex app` uses this compatibility installer instead of replacing it with the stock macOS-13+ desktop build.
+
+
 Run the following on Mac or Linux to install Codex CLI:
 
 ```shell
