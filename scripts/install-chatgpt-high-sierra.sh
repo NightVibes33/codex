@@ -174,7 +174,8 @@ cat > "$RES/app/main.cjs" <<'JS'
 "use strict";
 
 const path = require("node:path");
-const { app } = require("electron");
+const electron = require("electron");
+const { app, session, BrowserWindow } = electron;
 
 const originalApp = path.join(process.resourcesPath, "original.asar");
 
@@ -188,6 +189,52 @@ if (typeof app.showTaskManager !== "function") {
     enumerable: false,
     value() {},
   });
+}
+
+// Owl/Electron 42 exposes a small set of shell capability APIs that do not
+// exist in stock Electron 26. Preserve OpenAI's feature-detection semantics:
+// unsupported visual/native-shell features report false, setters are harmless
+// no-ops, and ordinary Electron behavior remains untouched.
+function defineCompat(target, name, value) {
+  if (target && typeof target[name] !== "function") {
+    Object.defineProperty(target, name, {
+      configurable: true,
+      enumerable: false,
+      writable: false,
+      value,
+    });
+  }
+}
+
+defineCompat(app, "setRuntimeFeatures", () => {});
+defineCompat(app, "isRuntimeFeatureEnabled", () => false);
+defineCompat(app, "setDebugChromePagesEnabled", () => {});
+defineCompat(app, "beginNativeMenuTracking", () => {});
+defineCompat(app, "endNativeMenuTracking", () => {});
+
+defineCompat(BrowserWindow, "isAlwaysOnTopSupported", () => true);
+defineCompat(BrowserWindow, "isSystemBackdropSupported", () => false);
+defineCompat(BrowserWindow, "isInputShapeSupported", () => false);
+
+function patchSession(sess) {
+  if (!sess) return sess;
+  defineCompat(sess, "setWebsiteReportingEnabled", () => {});
+  return sess;
+}
+
+// Register before OpenAI's bootstrap installs its own session-created handler
+// so every session has the compatibility surface before OpenAI touches it.
+app.on("session-created", patchSession);
+if (session && typeof session.fromPartition === "function") {
+  const originalFromPartition = session.fromPartition.bind(session);
+  session.fromPartition = function (...args) {
+    return patchSession(originalFromPartition(...args));
+  };
+}
+if (app.isReady()) {
+  patchSession(session && session.defaultSession);
+} else {
+  app.whenReady().then(() => patchSession(session && session.defaultSession));
 }
 
 // Runtime-only ECMAScript compatibility for Electron 26 / Node 18. These
