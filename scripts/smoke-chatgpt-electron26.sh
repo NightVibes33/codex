@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DMG_URL="${CHATGPT_X64_DMG_URL:-https://persistent.oaistatic.com/codex-app-prod/ChatGPT-latest-x64.dmg}"
+APPCAST_URL="${CHATGPT_X64_APPCAST_URL:-https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml}"
+SOURCE_URL="${CHATGPT_X64_SOURCE_URL:-}"
 ELECTRON_VERSION="${ELECTRON_VERSION:-26.6.10}"
 OUT="${1:-$PWD/chatgpt-electron26-smoke}"
 TMP="$(mktemp -d -t chatgpt-electron26.XXXXXX)"
 MOUNT="$TMP/mount"
-DMG="$TMP/ChatGPT-latest-x64.dmg"
+SOURCE_ARCHIVE="$TMP/chatgpt-source"
 EZIP="$TMP/electron.zip"
 EDIR="$TMP/electron"
 APP="$TMP/ChatGPT-High-Sierra.app"
@@ -29,10 +30,42 @@ trap cleanup EXIT
 rm -rf "$OUT"
 mkdir -p "$OUT" "$MOUNT" "$EDIR" "$ASAR_ROOT"
 
-curl -fL --retry 4 --retry-delay 2 "$DMG_URL" -o "$DMG"
-hdiutil attach "$DMG" -mountpoint "$MOUNT" -nobrowse -readonly >/dev/null
-SOURCE_APP="$(find "$MOUNT" -maxdepth 2 -type d -name 'ChatGPT.app' -print -quit)"
-[[ -n "$SOURCE_APP" ]] || { echo "ChatGPT.app missing" >&2; exit 1; }
+if [[ -z "$SOURCE_URL" ]]; then
+  curl -fsSL --retry 4 --retry-delay 2 \
+    -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15" \
+    "$APPCAST_URL" -o "$TMP/appcast.xml"
+  SOURCE_URL="$(python3 - "$TMP/appcast.xml" <<'PY'
+import sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+for item in root.findall(".//item"):
+    enclosure = item.find("enclosure")
+    if enclosure is not None and enclosure.attrib.get("url"):
+        print(enclosure.attrib["url"])
+        break
+else:
+    raise SystemExit("no x64 ChatGPT enclosure found in appcast")
+PY
+)"
+fi
+
+case "$SOURCE_URL" in
+  *.zip)
+    curl -fL --retry 4 --retry-delay 2 "$SOURCE_URL" -o "$SOURCE_ARCHIVE.zip"
+    mkdir -p "$TMP/source"
+    ditto -x -k "$SOURCE_ARCHIVE.zip" "$TMP/source"
+    SOURCE_APP="$(find "$TMP/source" -maxdepth 3 -type d -name 'ChatGPT.app' -print -quit)"
+    ;;
+  *.dmg)
+    curl -fL --retry 4 --retry-delay 2 "$SOURCE_URL" -o "$SOURCE_ARCHIVE.dmg"
+    hdiutil attach "$SOURCE_ARCHIVE.dmg" -mountpoint "$MOUNT" -nobrowse -readonly >/dev/null
+    SOURCE_APP="$(find "$MOUNT" -maxdepth 2 -type d -name 'ChatGPT.app' -print -quit)"
+    ;;
+  *)
+    echo "Unsupported official ChatGPT source URL: $SOURCE_URL" >&2
+    exit 1
+    ;;
+esac
+[[ -n "$SOURCE_APP" ]] || { echo "ChatGPT.app missing from official source" >&2; exit 1; }
 
 SOURCE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SOURCE_APP/Contents/Info.plist")"
 SOURCE_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$SOURCE_APP/Contents/Info.plist")"
@@ -97,7 +130,7 @@ PY
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 {
-  echo "source_url=$DMG_URL"
+  echo "source_url=$SOURCE_URL"
   echo "source_version=$SOURCE_VERSION"
   echo "source_build=$SOURCE_BUILD"
   echo "source_electron=42.3.0"
