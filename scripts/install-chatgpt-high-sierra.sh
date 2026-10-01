@@ -147,6 +147,240 @@ fi
 ditto "$ELECTRON_DIR/Electron.app" "$COMPAT_APP"
 ditto "$SOURCE_APP/Contents/Resources" "$COMPAT_APP/Contents/Resources"
 
+# Keep OpenAI's real packaged application byte-for-byte and put only a tiny
+# runtime-compatibility bootstrap in Electron's conventional Resources/app
+# directory. Electron 26 loads this bootstrap, which supplies JS APIs missing
+# from its Node 18 runtime and then transfers control to OpenAI's real
+# early-bootstrap.js. No renderer/UI code is replaced.
+RES="$COMPAT_APP/Contents/Resources"
+if [[ ! -f "$RES/app.asar" ]]; then
+  echo "Official OpenAI app.asar is missing." >&2
+  exit 1
+fi
+mv "$RES/app.asar" "$RES/original.asar"
+if [[ -d "$RES/app.asar.unpacked" ]]; then
+  mv "$RES/app.asar.unpacked" "$RES/original.asar.unpacked"
+fi
+rm -rf "$RES/app"
+mkdir -p "$RES/app"
+cat > "$RES/app/package.json" <<'JSON'
+{
+  "name": "openai-codex-high-sierra-runtime-compat",
+  "version": "1.0.0",
+  "main": "main.cjs"
+}
+JSON
+cat > "$RES/app/main.cjs" <<'JS'
+"use strict";
+
+const path = require("node:path");
+const { app } = require("electron");
+
+const originalApp = path.join(process.resourcesPath, "original.asar");
+
+// Runtime-only ECMAScript compatibility for Electron 26 / Node 18. These
+// helpers match later platform semantics closely enough for OpenAI's current
+// desktop bootstrap while leaving the real OpenAI app payload untouched.
+if (!Symbol.dispose) Symbol.dispose = Symbol.for("dispose");
+if (!Symbol.asyncDispose) Symbol.asyncDispose = Symbol.for("asyncDispose");
+
+if (!Promise.withResolvers) {
+  Promise.withResolvers = function withResolvers() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
+if (!URL.parse) {
+  URL.parse = function parse(input, base) {
+    try {
+      return new URL(input, base);
+    } catch {
+      return null;
+    }
+  };
+}
+if (!URL.canParse) {
+  URL.canParse = function canParse(input, base) {
+    try {
+      new URL(input, base);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+}
+
+if (!AbortSignal.any) {
+  AbortSignal.any = function any(signals) {
+    const controller = new AbortController();
+    const list = Array.from(signals || []);
+    const abort = (signal) => {
+      if (controller.signal.aborted) return;
+      try {
+        controller.abort(signal && "reason" in signal ? signal.reason : undefined);
+      } catch {
+        controller.abort();
+      }
+    };
+    for (const signal of list) {
+      if (!signal) continue;
+      if (signal.aborted) {
+        abort(signal);
+        break;
+      }
+      signal.addEventListener("abort", () => abort(signal), { once: true });
+    }
+    return controller.signal;
+  };
+}
+
+if (!Array.prototype.toSorted) {
+  Object.defineProperty(Array.prototype, "toSorted", {
+    configurable: true,
+    writable: true,
+    value: function toSorted(compareFn) { return Array.from(this).sort(compareFn); },
+  });
+}
+if (!Array.prototype.toReversed) {
+  Object.defineProperty(Array.prototype, "toReversed", {
+    configurable: true,
+    writable: true,
+    value: function toReversed() { return Array.from(this).reverse(); },
+  });
+}
+if (!Array.prototype.toSpliced) {
+  Object.defineProperty(Array.prototype, "toSpliced", {
+    configurable: true,
+    writable: true,
+    value: function toSpliced(start, deleteCount, ...items) {
+      const copy = Array.from(this);
+      copy.splice(start, deleteCount, ...items);
+      return copy;
+    },
+  });
+}
+if (!Array.prototype.with) {
+  Object.defineProperty(Array.prototype, "with", {
+    configurable: true,
+    writable: true,
+    value: function arrayWith(index, value) {
+      const copy = Array.from(this);
+      let i = Number(index);
+      if (i < 0) i += copy.length;
+      if (!Number.isInteger(i) || i < 0 || i >= copy.length) {
+        throw new RangeError("Invalid index");
+      }
+      copy[i] = value;
+      return copy;
+    },
+  });
+}
+
+if (!Object.groupBy) {
+  Object.groupBy = function groupBy(items, callback) {
+    const out = Object.create(null);
+    let index = 0;
+    for (const item of items) {
+      const key = callback(item, index++);
+      const propertyKey = typeof key === "symbol" ? key : String(key);
+      (out[propertyKey] || (out[propertyKey] = [])).push(item);
+    }
+    return out;
+  };
+}
+if (!Map.groupBy) {
+  Map.groupBy = function groupBy(items, callback) {
+    const out = new Map();
+    let index = 0;
+    for (const item of items) {
+      const key = callback(item, index++);
+      const group = out.get(key);
+      if (group) group.push(item);
+      else out.set(key, [item]);
+    }
+    return out;
+  };
+}
+
+if (!String.prototype.isWellFormed) {
+  Object.defineProperty(String.prototype, "isWellFormed", {
+    configurable: true,
+    writable: true,
+    value: function isWellFormed() {
+      const s = String(this);
+      for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        if (c >= 0xd800 && c <= 0xdbff) {
+          const n = s.charCodeAt(++i);
+          if (!(n >= 0xdc00 && n <= 0xdfff)) return false;
+        } else if (c >= 0xdc00 && c <= 0xdfff) {
+          return false;
+        }
+      }
+      return true;
+    },
+  });
+}
+if (!String.prototype.toWellFormed) {
+  Object.defineProperty(String.prototype, "toWellFormed", {
+    configurable: true,
+    writable: true,
+    value: function toWellFormed() {
+      const s = String(this);
+      let out = "";
+      for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        if (c >= 0xd800 && c <= 0xdbff) {
+          const n = s.charCodeAt(i + 1);
+          if (n >= 0xdc00 && n <= 0xdfff) {
+            out += s[i] + s[++i];
+          } else {
+            out += "\ufffd";
+          }
+        } else if (c >= 0xdc00 && c <= 0xdfff) {
+          out += "\ufffd";
+        } else {
+          out += s[i];
+        }
+      }
+      return out;
+    },
+  });
+}
+
+// Make app.getAppPath() and relative chunk resolution describe the actual
+// OpenAI application, not this compatibility bootstrap.
+app.setAppPath(originalApp);
+
+if (process.env.CHATGPT_HIGH_SIERRA_DIAGNOSTICS === "1") {
+  const originalCatch = Promise.prototype.catch;
+  Promise.prototype.catch = function (handler) {
+    if (typeof handler !== "function") return originalCatch.call(this, handler);
+    return originalCatch.call(this, (error) => {
+      try {
+        console.error("[high-sierra-compat] caught", error && (error.stack || error));
+      } catch {}
+      return handler(error);
+    });
+  };
+  process.on("uncaughtException", (error) => {
+    console.error("[high-sierra-compat] uncaught", error && (error.stack || error));
+    throw error;
+  });
+  process.on("unhandledRejection", (error) => {
+    console.error("[high-sierra-compat] unhandled", error && (error.stack || error));
+  });
+}
+
+require(path.join(originalApp, ".vite", "build", "early-bootstrap.js"));
+JS
+
 "$PYTHON_BIN" - \
   "$ELECTRON_DIR/Electron.app/Contents/Info.plist" \
   "$SOURCE_APP/Contents/Info.plist" \
@@ -256,6 +490,11 @@ xattr -dr com.apple.quarantine "$DEST" >/dev/null 2>&1 || true
 # desktop payload. The standalone terminal `codex` command is installed from
 # this fork by scripts/install-high-sierra.sh.
 OFFICIAL_CODEX="$DEST/Contents/Resources/codex-cli/bin/codex"
+if [[ ! -f "$DEST/Contents/Resources/original.asar" || ! -f "$DEST/Contents/Resources/app/main.cjs" ]]; then
+  echo "High Sierra runtime bootstrap or preserved OpenAI app payload is missing." >&2
+  exit 1
+fi
+
 if [[ ! -x "$OFFICIAL_CODEX" ]]; then
   echo "Official bundled Codex CLI was not found at: $OFFICIAL_CODEX" >&2
   exit 1
