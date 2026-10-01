@@ -108,6 +108,80 @@ PY
 # rebuilt for Electron 26 / macOS 10.13 or gated if they rely on newer APIs.
 find "$SOURCE_RES" -type f -name '*.node' -print | sort > "$OUT/native-addons.txt"
 
+# Diagnostic bootstrap: preserve OpenAI's app.asar byte-for-byte as
+# original.asar, then use a tiny temporary CI-only app.asar to expose the first
+# Electron 42 -> Electron 26 incompatibility before handing control to the real
+# OpenAI early bootstrap.
+ORIGINAL_ASAR="$APP/Contents/Resources/original.asar"
+mv "$APP/Contents/Resources/app.asar" "$ORIGINAL_ASAR"
+if [[ -d "$APP/Contents/Resources/app.asar.unpacked" ]]; then
+  mv "$APP/Contents/Resources/app.asar.unpacked" "$APP/Contents/Resources/original.asar.unpacked"
+fi
+
+DIAG_ROOT="$TMP/diagnostic-bootstrap"
+mkdir -p "$DIAG_ROOT"
+cat > "$DIAG_ROOT/package.json" <<'JSON'
+{
+  "name": "openai-codex-high-sierra-diagnostic-bootstrap",
+  "version": "1.0.0",
+  "main": "main.cjs"
+}
+JSON
+
+cat > "$DIAG_ROOT/main.cjs" <<'JS'
+const path = require("node:path");
+const util = require("node:util");
+
+const dump = (label, value) => {
+  try {
+    const rendered =
+      typeof value === "string"
+        ? value
+        : util.inspect(value, { depth: 8, breakLength: 160 });
+    console.error("[high-sierra-diag]", label, rendered);
+  } catch {}
+};
+
+dump("versions", process.versions);
+dump("resourcesPath", process.resourcesPath);
+dump("argv", process.argv);
+
+process.on("uncaughtException", (error) => {
+  dump("uncaughtException", error && (error.stack || error));
+  process.exitCode = 91;
+});
+process.on("unhandledRejection", (error) => {
+  dump("unhandledRejection", error && (error.stack || error));
+  process.exitCode = 92;
+});
+process.on("warning", (warning) => {
+  dump("warning", warning && (warning.stack || warning));
+});
+process.on("beforeExit", (code) => dump("beforeExit", code));
+process.on("exit", (code) => dump("exit", code));
+
+const target = path.join(
+  process.resourcesPath,
+  "original.asar",
+  ".vite",
+  "build",
+  "early-bootstrap.js"
+);
+dump("loading-real-openai-bootstrap", target);
+
+try {
+  require(target);
+  dump("real-openai-bootstrap-returned", target);
+} catch (error) {
+  dump("real-openai-bootstrap-threw", error && (error.stack || error));
+  process.exitCode = 93;
+  setTimeout(() => process.exit(process.exitCode || 93), 250);
+}
+JS
+
+npx --yes @electron/asar@3 pack "$DIAG_ROOT" "$APP/Contents/Resources/app.asar"
+codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
+
 mkdir -p "$TMP/user-data" "$TMP/codex-home"
 
 run_probe() {
@@ -195,7 +269,9 @@ log show --last 5m --style compact \
 cat "$OUT/build-info.txt"
 cat "$OUT/bundle-status.txt"
 cat "$OUT/direct-status.txt"
+echo "--- diagnostic markers ---"
+grep -E '\[high-sierra-diag\]' "$OUT/bundle-stderr.log" || true
 echo "--- bundle stderr ---"
-tail -200 "$OUT/bundle-stderr.log" || true
+tail -300 "$OUT/bundle-stderr.log" || true
 echo "--- direct stderr ---"
 tail -200 "$OUT/direct-stderr.log" || true
