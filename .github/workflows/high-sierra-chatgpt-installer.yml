@@ -56,7 +56,12 @@ jobs:
           err="$RUNNER_TEMP/chatgpt-installed-stderr.log"
           cdp="$RUNNER_TEMP/chatgpt-installed-cdp.json"
 
-          "$app/Contents/MacOS/Electron"             --remote-debugging-port=9231             --disable-gpu             --no-sandbox             --enable-logging=stderr             >"$out" 2>"$err" &
+          "$app/Contents/MacOS/Electron" \
+            --remote-debugging-port=9231 \
+            --disable-gpu \
+            --no-sandbox \
+            --enable-logging=stderr \
+            >"$out" 2>"$err" &
           pid=$!
 
           cleanup() {
@@ -71,15 +76,7 @@ jobs:
               break
             fi
             if curl -fsS "http://127.0.0.1:9231/json/list" -o "$cdp"; then
-              if python3 - "$cdp" <<'PY'
-import json, sys
-items=json.load(open(sys.argv[1]))
-pages=[x for x in items if x.get("type") in ("page","webview")]
-if not pages:
-    raise SystemExit(1)
-print(json.dumps([{"type":x.get("type"),"title":x.get("title"),"url":x.get("url")} for x in pages], indent=2))
-PY
-              then
+              if python3 -c 'import json,sys; items=json.load(open(sys.argv[1])); pages=[x for x in items if x.get("type") in ("page","webview")]; print(json.dumps([{"type":x.get("type"),"title":x.get("title"),"url":x.get("url")} for x in pages], indent=2)); raise SystemExit(0 if pages else 1)' "$cdp"; then
                 captured=true
                 break
               fi
