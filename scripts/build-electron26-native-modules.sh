@@ -28,7 +28,7 @@ cat > package.json <<'JSON'
 JSON
 
 npm install --ignore-scripts --no-audit --no-fund
-npx electron-rebuild --version "$ELECTRON_VERSION" --arch x64 --force   --module-dir "$TMP/work"   --which-module better-sqlite3   --which-module node-pty
+npx electron-rebuild --version "$ELECTRON_VERSION" --arch x64 --force --build-from-source --module-dir "$TMP/work" --which-module "better-sqlite3,node-pty"
 
 mkdir -p "$OUT/better-sqlite3/build/Release" "$OUT/node-pty/build/Release"
 cp node_modules/better-sqlite3/build/Release/better_sqlite3.node   "$OUT/better-sqlite3/build/Release/better_sqlite3.node"
