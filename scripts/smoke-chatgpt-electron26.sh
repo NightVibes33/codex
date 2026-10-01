@@ -160,15 +160,32 @@ run_probe bundle "$APP/Contents/MacOS/ChatGPT"
 # app.asar. This separates bundle-plist/codesign issues from JS/runtime issues.
 run_probe direct "$EDIR/Electron.app/Contents/MacOS/Electron" "$SOURCE_RES/app.asar"
 
-# Capture dyld resolution for the direct probe path.
+# Capture dyld resolution for the direct probe path without allowing a
+# successful GUI launch to hold the CI job open indefinitely.
 set +e
 DYLD_PRINT_LIBRARIES=1 \
 ELECTRON_ENABLE_LOGGING=1 \
 "$EDIR/Electron.app/Contents/MacOS/Electron" "$SOURCE_RES/app.asar" \
   --disable-gpu --no-sandbox --enable-logging=stderr \
-  >"$OUT/dyld-stdout.log" 2>"$OUT/dyld-stderr.log"
-echo "dyld_probe_exit_code=$?" > "$OUT/dyld-status.txt"
+  >"$OUT/dyld-stdout.log" 2>"$OUT/dyld-stderr.log" &
+DYLD_PID=$!
 set -e
+for _ in {1..8}; do
+  if ! kill -0 "$DYLD_PID" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if kill -0 "$DYLD_PID" >/dev/null 2>&1; then
+  kill "$DYLD_PID" >/dev/null 2>&1 || true
+  wait "$DYLD_PID" >/dev/null 2>&1 || true
+  echo "dyld_probe_exit_code=alive_after_8s" > "$OUT/dyld-status.txt"
+else
+  set +e
+  wait "$DYLD_PID"
+  echo "dyld_probe_exit_code=$?" > "$OUT/dyld-status.txt"
+  set -e
+fi
 
 # Electron/Chromium frequently reports early failures only to unified logging.
 log show --last 5m --style compact \
