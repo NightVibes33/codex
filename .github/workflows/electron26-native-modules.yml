@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: electron26-native-modules
@@ -44,3 +44,21 @@ jobs:
             ${{ runner.temp }}/native/SHA256SUMS
             ${{ runner.temp }}/native/BUILD-INFO.txt
           if-no-files-found: error
+
+      - name: Publish rolling Electron 26 native pack
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="high-sierra-electron26-native"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag"               -f sha="$GITHUB_SHA" -F force=true >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs"               -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag"               --title "ChatGPT Electron 26 native modules (rolling)"               --prerelease               --notes "x86_64 native modules rebuilt for Electron 26 / macOS 10.13 compatibility."
+          fi
+
+          gh release upload "$tag"             "$RUNNER_TEMP/native/electron26-native-darwin-x64.tar.gz"             "$RUNNER_TEMP/native/SHA256SUMS"             "$RUNNER_TEMP/native/BUILD-INFO.txt"             --clobber
