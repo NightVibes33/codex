@@ -19,6 +19,7 @@ concurrency:
 jobs:
   real-app-electron26-smoke:
     runs-on: macos-15-intel
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
