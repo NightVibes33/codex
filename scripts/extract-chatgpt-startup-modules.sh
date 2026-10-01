@@ -59,27 +59,9 @@ copy_matches() {
 }
 
 copy_matches 'application-network-startup-.*\.js$'
-copy_matches 'startup-requirements-.*\.js
-
-echo "--- extracted files ---"
-wc -c "$OUT"/*.js
-echo "--- startup requirement symbols ---"
-grep -hEo 'initializeNodeNetworkPermissions|configRequirements/read|application/network|setPermission[A-Za-z]+|Desktop network requirements prevented startup|app\.exit\([^)]*\)' "$OUT"/*.js | sort -u || true
-
-copy_matches 'desktop-open-path-queue-.*\.js
-
-echo "--- extracted files ---"
-wc -c "$OUT"/*.js
-echo "--- startup requirement symbols ---"
-grep -hEo 'initializeNodeNetworkPermissions|configRequirements/read|application/network|setPermission[A-Za-z]+|Desktop network requirements prevented startup|app\.exit\([^)]*\)' "$OUT"/*.js | sort -u || true
-
-copy_matches 'early-bootstrap\.js
-
-echo "--- extracted files ---"
-wc -c "$OUT"/*.js
-echo "--- startup requirement symbols ---"
-grep -hEo 'initializeNodeNetworkPermissions|configRequirements/read|application/network|setPermission[A-Za-z]+|Desktop network requirements prevented startup|app\.exit\([^)]*\)' "$OUT"/*.js | sort -u || true
-
+copy_matches 'startup-requirements-.*\.js$'
+copy_matches 'desktop-open-path-queue-.*\.js$'
+copy_matches 'early-bootstrap\.js$'
 
 echo "--- extracted files ---"
 wc -c "$OUT"/*.js
