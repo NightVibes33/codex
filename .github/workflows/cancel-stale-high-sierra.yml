@@ -19,6 +19,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for run_id in 36918109266 36918122908 36918831551; do
+          for run_id in 36918109266 36918122908 36918831551 36919180689 36917255484; do
             gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel" >/dev/null 2>&1 || true
           done
