@@ -108,21 +108,31 @@ source_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString'
 source_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$SOURCE_APP/Contents/Info.plist")"
 
 echo "Downloading Electron $ELECTRON_VERSION (last Electron line supporting macOS 10.13)..."
-electron_url="https://github.com/electron/electron/releases/download/v$ELECTRON_VERSION/electron-v$ELECTRON_VERSION-darwin-x64.zip"
+electron_asset="electron-v$ELECTRON_VERSION-darwin-x64.zip"
+electron_urls=(
+  "https://github.com/electron/electron/releases/download/v$ELECTRON_VERSION/$electron_asset"
+  "https://npmmirror.com/mirrors/electron/v$ELECTRON_VERSION/$electron_asset"
+)
 electron_downloaded=0
-attempt=1
-while [[ "$attempt" -le 10 ]]; do
-  if curl -fL --connect-timeout 30 --max-time 300 "$electron_url" -o "$TMP/Electron.zip"; then
-    electron_downloaded=1
-    break
-  fi
-  echo "Electron download attempt $attempt failed; retrying..." >&2
-  rm -f "$TMP/Electron.zip"
-  sleep 3
-  attempt=$((attempt + 1))
+for electron_url in "${electron_urls[@]}"; do
+  attempt=1
+  while [[ "$attempt" -le 4 ]]; do
+    echo "Electron source: $electron_url"
+    if curl -fL --retry 2 --retry-delay 2 --connect-timeout 20 --max-time 300 "$electron_url" -o "$TMP/Electron.zip"; then
+      if unzip -tq "$TMP/Electron.zip" >/dev/null 2>&1; then
+        electron_downloaded=1
+        break 2
+      fi
+      echo "Electron archive validation failed from $electron_url" >&2
+    fi
+    echo "Electron download attempt $attempt failed; retrying..." >&2
+    rm -f "$TMP/Electron.zip"
+    sleep 2
+    attempt=$((attempt + 1))
+  done
 done
 if [[ "$electron_downloaded" != "1" ]]; then
-  echo "Failed to download Electron $ELECTRON_VERSION after 10 attempts." >&2
+  echo "Failed to download a valid Electron $ELECTRON_VERSION archive from all configured sources." >&2
   exit 1
 fi
 ditto -x -k "$TMP/Electron.zip" "$ELECTRON_DIR"
