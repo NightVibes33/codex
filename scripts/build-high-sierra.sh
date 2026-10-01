@@ -15,8 +15,7 @@ mkdir -p "$OUT" "$WORK"
 
 cd "$ROOT/codex-rs"
 cargo build --release --target "$TARGET" \
-  -p codex-cli --bin codex \
-  -p codex-code-mode-host --bin codex-code-mode-host
+  -p codex-cli --bin codex
 
 RG_ROOT="$WORK/rg-root"
 cargo install ripgrep --version 14.1.1 --locked --root "$RG_ROOT" --target "$TARGET"
@@ -24,9 +23,8 @@ cargo install ripgrep --version 14.1.1 --locked --root "$RG_ROOT" --target "$TAR
 PACKAGE="$OUT/codex-high-sierra-x86_64"
 mkdir -p "$PACKAGE/bin" "$PACKAGE/codex-path"
 cp "target/$TARGET/release/codex" "$PACKAGE/bin/codex"
-cp "target/$TARGET/release/codex-code-mode-host" "$PACKAGE/bin/codex-code-mode-host"
 cp "$RG_ROOT/bin/rg" "$PACKAGE/codex-path/rg"
-chmod 0755 "$PACKAGE/bin/codex" "$PACKAGE/bin/codex-code-mode-host" "$PACKAGE/codex-path/rg"
+chmod 0755 "$PACKAGE/bin/codex" "$PACKAGE/codex-path/rg"
 
 VERSION="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
 cat > "$PACKAGE/codex-package.json" <<EOF
@@ -61,7 +59,6 @@ verify_minos() {
 }
 
 verify_minos "$PACKAGE/bin/codex"
-verify_minos "$PACKAGE/bin/codex-code-mode-host"
 verify_minos "$PACKAGE/codex-path/rg"
 
 "$PACKAGE/bin/codex" --version
