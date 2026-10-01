@@ -49,11 +49,51 @@ ditto "$EDIR/Electron.app" "$APP"
 rm -rf "$APP/Contents/Resources"
 ditto "$SOURCE_RES" "$APP/Contents/Resources"
 
-cp "$SOURCE_APP/Contents/Info.plist" "$APP/Contents/Info.plist"
-mv "$APP/Contents/MacOS/Electron" "$APP/Contents/MacOS/ChatGPT"
-/usr/libexec/PlistBuddy -c "Set :CFBundleExecutable ChatGPT" "$APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 10.13" "$APP/Contents/Info.plist" 2>/dev/null || \
-  /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 10.13" "$APP/Contents/Info.plist"
+# IMPORTANT: keep Electron 26's runtime/helper metadata. Copying the Electron 42
+# plist wholesale makes Electron 26 look for the wrong helper bundle layout and
+# exits before the OpenAI app can finish launching. Merge only product-facing
+# OpenAI metadata onto the compatible runtime plist.
+python3 - "$EDIR/Electron.app/Contents/Info.plist" "$SOURCE_APP/Contents/Info.plist" "$APP/Contents/Info.plist" <<'PY'
+import plistlib, sys
+base_path, source_path, out_path = sys.argv[1:4]
+with open(base_path, "rb") as f:
+    base = plistlib.load(f)
+with open(source_path, "rb") as f:
+    source = plistlib.load(f)
+
+for key in (
+    "CFBundleIdentifier",
+    "CFBundleName",
+    "CFBundleDisplayName",
+    "CFBundleShortVersionString",
+    "CFBundleVersion",
+    "CFBundleIconFile",
+    "CFBundleIconName",
+    "CFBundleURLTypes",
+    "CFBundleDocumentTypes",
+    "LSApplicationCategoryType",
+    "LSMultipleInstancesProhibited",
+    "NSUserActivityTypes",
+):
+    if key in source:
+        base[key] = source[key]
+
+# Preserve the real app's privacy prompts without importing Electron-42-only
+# runtime keys such as ElectronAsarIntegrity / helper identifiers.
+for key, value in source.items():
+    if key.startswith("NS") and key.endswith("UsageDescription"):
+        base[key] = value
+
+base["LSMinimumSystemVersion"] = "10.13"
+# Keep Electron 26's actual launcher name and helper layout.
+base["CFBundleExecutable"] = "Electron"
+
+with open(out_path, "wb") as f:
+    plistlib.dump(base, f, sort_keys=False)
+PY
+
+# The OpenAI icon lives in the copied Resources directory. The current app
+# payload, authentication callback schemes, and renderer are unchanged.
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 {
@@ -64,9 +104,10 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
   echo "compat_electron=$ELECTRON_VERSION"
   echo "source_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$SOURCE_APP/Contents/Info.plist")"
   echo "compat_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
+  echo "compat_executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
   echo "compat_min_macos=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
-  file "$APP/Contents/MacOS/ChatGPT"
-  otool -l "$APP/Contents/MacOS/ChatGPT" | awk '
+  file "$APP/Contents/MacOS/Electron"
+  otool -l "$APP/Contents/MacOS/Electron" | awk '
     /cmd LC_BUILD_VERSION/ {show=1; print; next}
     /cmd LC_VERSION_MIN_MACOSX/ {show=1; print; next}
     show && /^(      cmd|  cmdsize)/ {show=0}
@@ -228,7 +269,7 @@ run_probe() {
 }
 
 # Probe A: compatibility app bundle carrying the real OpenAI resources.
-run_probe bundle "$APP/Contents/MacOS/ChatGPT"
+run_probe bundle "$APP/Contents/MacOS/Electron"
 
 # Probe B: pristine Electron 26 launcher pointed directly at the real OpenAI
 # app.asar. This separates bundle-plist/codesign issues from JS/runtime issues.
