@@ -1,0 +1,26 @@
+name: Extract real ChatGPT startup modules
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/extract-chatgpt-startup-modules.sh"
+      - ".github/workflows/extract-chatgpt-startup-modules.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract OpenAI startup modules
+        run: bash scripts/extract-chatgpt-startup-modules.sh "$RUNNER_TEMP/startup"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-chatgpt-startup-modules
+          path: ${{ runner.temp }}/startup/*
+          if-no-files-found: error
