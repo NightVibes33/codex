@@ -1,0 +1,23 @@
+name: Audit historical official ChatGPT x64
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/audit-chatgpt-historical-x64.sh"
+      - ".github/workflows/high-sierra-chatgpt-historical.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/audit-chatgpt-historical-x64.sh "https://persistent.oaistatic.com/codex-app-prod/Codex-darwin-x64-26.623.141536.zip" "$RUNNER_TEMP/historical"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-chatgpt-x64-26.623.141536-audit
+          path: ${{ runner.temp }}/historical/*
