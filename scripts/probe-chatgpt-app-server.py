@@ -11,7 +11,7 @@ if len(sys.argv) != 3:
 
 cli, output_path = sys.argv[1:3]
 proc = subprocess.Popen(
-    [cli, "app-server", "--stdio"],
+    [cli, "app-server", "--analytics-default-enabled"],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
     stderr=subprocess.PIPE,
@@ -32,17 +32,16 @@ def send(obj):
     proc.stdin.flush()
 
 send({
-    "id": 1,
+    "id": "network-initialize",
     "method": "initialize",
     "params": {
         "clientInfo": {
-            "name": "chatgpt-high-sierra-probe",
-            "title": "ChatGPT High Sierra Probe",
-            "version": "1.0.0",
+            "name": "codex_desktop",
+            "title": "Codex Desktop",
+            "version": os.environ.get("CHATGPT_APP_VERSION", "26.928.40906"),
         },
         "capabilities": {
             "experimentalApi": True,
-            "requestAttestation": False,
         },
     },
 })
@@ -67,12 +66,13 @@ try:
             except Exception:
                 continue
 
-            if msg.get("id") == 1:
+            if msg.get("id") == "network-initialize":
                 if "error" in msg:
                     raise RuntimeError("initialize error: " + json.dumps(msg))
                 initialized = True
-                send({"id": 2, "method": "configRequirements/read"})
-            elif msg.get("id") == 2:
+                send({"method": "initialized"})
+                send({"id": "network-requirements", "method": "configRequirements/read", "params": {}})
+            elif msg.get("id") == "network-requirements":
                 if "error" in msg:
                     raise RuntimeError("configRequirements/read error: " + json.dumps(msg))
                 requirements = msg.get("result")
