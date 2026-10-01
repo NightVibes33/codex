@@ -187,6 +187,96 @@ dump("versions", process.versions);
 dump("resourcesPath", process.resourcesPath);
 dump("argv", process.argv);
 
+// Observe the real OpenAI startup modules without replacing their behavior.
+const Module = require("node:module");
+const electron = require("electron");
+const originalLoad = Module._load;
+
+function wrapLoggerNamespace(namespace, request) {
+  if (!namespace || typeof namespace !== "object") return;
+  if (typeof namespace.getLogger !== "function") return;
+  try {
+    const originalGetLogger = namespace.getLogger;
+    namespace.getLogger = function (...args) {
+      const logger = originalGetLogger.apply(this, args);
+      if (logger && typeof logger.error === "function" && !logger.__highSierraWrapped) {
+        const originalError = logger.error.bind(logger);
+        try {
+          Object.defineProperty(logger, "__highSierraWrapped", { value: true });
+        } catch {}
+        logger.error = (...errorArgs) => {
+          dump("openai-logger-error", { request, errorArgs });
+          return originalError(...errorArgs);
+        };
+      }
+      return logger;
+    };
+    dump("wrapped-getLogger", request);
+  } catch (error) {
+    dump("wrap-getLogger-failed", { request, error: error && (error.stack || error) });
+  }
+}
+
+function wrapStartupRequirements(namespace, request) {
+  if (!namespace || typeof namespace !== "object") return;
+  if (typeof namespace.initializeNodeNetworkPermissions !== "function") return;
+  try {
+    const original = namespace.initializeNodeNetworkPermissions;
+    namespace.initializeNodeNetworkPermissions = async function (...args) {
+      dump("initializeNodeNetworkPermissions-start", { request });
+      try {
+        const result = await original.apply(this, args);
+        dump("initializeNodeNetworkPermissions-result", result);
+        return result;
+      } catch (error) {
+        dump("initializeNodeNetworkPermissions-error", error && (error.stack || error));
+        throw error;
+      }
+    };
+    dump("wrapped-initializeNodeNetworkPermissions", request);
+  } catch (error) {
+    dump("wrap-startup-requirements-failed", {
+      request,
+      error: error && (error.stack || error),
+    });
+  }
+}
+
+Module._load = function (request, parent, isMain) {
+  const loaded = originalLoad.apply(this, arguments);
+  if (typeof request === "string") {
+    if (request.includes("application-network-startup-")) {
+      dump("loaded-application-network-startup", {
+        request,
+        keys: loaded && typeof loaded === "object" ? Object.keys(loaded) : [],
+        namespaceKeys:
+          loaded && loaded.n && typeof loaded.n === "object" ? Object.keys(loaded.n) : [],
+      });
+      wrapLoggerNamespace(loaded, request);
+      wrapLoggerNamespace(loaded && loaded.n, request);
+    }
+    if (request.includes("startup-requirements-")) {
+      dump("loaded-startup-requirements", {
+        request,
+        keys: loaded && typeof loaded === "object" ? Object.keys(loaded) : [],
+        namespaceKeys:
+          loaded && loaded.n && typeof loaded.n === "object" ? Object.keys(loaded.n) : [],
+      });
+      wrapStartupRequirements(loaded, request);
+      wrapStartupRequirements(loaded && loaded.n, request);
+    }
+  }
+  return loaded;
+};
+
+if (electron && electron.app && typeof electron.app.exit === "function") {
+  const originalExit = electron.app.exit.bind(electron.app);
+  electron.app.exit = (code) => {
+    dump("electron.app.exit", { code, stack: new Error("app.exit").stack });
+    return originalExit(code);
+  };
+}
+
 process.on("uncaughtException", (error) => {
   dump("uncaughtException", error && (error.stack || error));
   process.exitCode = 91;
