@@ -1,0 +1,24 @@
+name: Audit official ChatGPT x64 appcast
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/audit-chatgpt-appcast.py"
+      - ".github/workflows/high-sierra-chatgpt-appcast.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read official OpenAI x64 appcast
+        run: python3 scripts/audit-chatgpt-appcast.py | tee "$RUNNER_TEMP/appcast.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-x64-official-appcast
+          path: ${{ runner.temp }}/appcast.txt
