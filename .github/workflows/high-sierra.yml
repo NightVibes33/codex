@@ -20,7 +20,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15-intel
+    runs-on: macos-15-xlarge
+    timeout-minutes: 45
     env:
       MACOSX_DEPLOYMENT_TARGET: "10.13"
       CARGO_TERM_COLOR: always
