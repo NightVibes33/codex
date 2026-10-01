@@ -31,6 +31,64 @@ jobs:
           export CHATGPT_HIGH_SIERRA_NO_LAUNCH=1
           bash scripts/install-chatgpt-high-sierra.sh | tee "$RUNNER_TEMP/install.log"
 
+      - name: Verify bundled Codex app-server startup gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/Applications/ChatGPT.app"
+          cli="$app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+          test -x "$cli"
+          python3 - "$cli" "$RUNNER_TEMP/app-server-probe.jsonl" <<'PY'
+import json, subprocess, sys, time
+
+cli, output_path = sys.argv[1:3]
+p = subprocess.Popen(
+    [cli, "app-server"],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+    bufsize=1,
+)
+requests = [
+    {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"high-sierra-verify","version":"1.0.0"}}},
+    {"jsonrpc":"2.0","method":"initialized"},
+    {"jsonrpc":"2.0","id":2,"method":"configRequirements/read"},
+]
+payload = "\n".join(json.dumps(x, separators=(",",":")) for x in requests) + "\n"
+try:
+    out, err = p.communicate(payload, timeout=20)
+except subprocess.TimeoutExpired:
+    p.kill()
+    out, err = p.communicate()
+    print("app-server probe timed out", file=sys.stderr)
+    print(err[-4000:], file=sys.stderr)
+    raise SystemExit(1)
+
+open(output_path, "w").write(out)
+print(out)
+if err:
+    print(err[-4000:], file=sys.stderr)
+
+responses = []
+for line in out.splitlines():
+    try:
+        msg = json.loads(line)
+    except Exception:
+        continue
+    if "id" in msg:
+        responses.append(msg)
+
+by_id = {str(m.get("id")): m for m in responses}
+init = by_id.get("1")
+req = by_id.get("2")
+if not init or "result" not in init:
+    raise SystemExit("initialize did not return a result")
+if not req or "result" not in req:
+    raise SystemExit("configRequirements/read did not return a result")
+print("bundled_app_server_startup_gate=pass")
+PY
+
       - name: Verify bundle and real renderer
         shell: bash
         run: |
