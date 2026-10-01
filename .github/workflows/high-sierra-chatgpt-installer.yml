@@ -52,7 +52,8 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.openai.codex"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist")" = "10.13"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")" = "Electron"
-          test -f "$app/Contents/Resources/original.asar"\n          test -f "$app/Contents/Resources/app/main.cjs"
+          test -f "$app/Contents/Resources/original.asar"
+          test -f "$app/Contents/Resources/app/main.cjs"
           test -x "$app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
           "$app/Contents/Resources/codex-cli/bin/codex" --version
 
