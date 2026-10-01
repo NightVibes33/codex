@@ -65,14 +65,7 @@ jobs:
               break
             fi
             if curl -fsS "http://127.0.0.1:9231/json/list" -o "$RUNNER_TEMP/chatgpt-installed-cdp.json"; then
-              if python3 - "$RUNNER_TEMP/chatgpt-installed-cdp.json" <<'PY'
-import json, sys
-items = json.load(open(sys.argv[1]))
-pages = [x for x in items if x.get("type") in ("page", "webview")]
-print(json.dumps([{"type": x.get("type"), "title": x.get("title"), "url": x.get("url")} for x in pages], indent=2))
-raise SystemExit(0 if pages else 1)
-PY
-              then
+              if python3 -c 'import json,sys; items=json.load(open(sys.argv[1])); pages=[x for x in items if x.get("type") in ("page","webview")]; print(json.dumps([{"type":x.get("type"),"title":x.get("title"),"url":x.get("url")} for x in pages], indent=2)); raise SystemExit(0 if pages else 1)' "$RUNNER_TEMP/chatgpt-installed-cdp.json"; then
                 captured=true
                 break
               fi
