@@ -163,11 +163,16 @@ if [[ -d "$RES/app.asar.unpacked" ]]; then
 fi
 rm -rf "$RES/app"
 mkdir -p "$RES/app"
-cat > "$RES/app/package.json" <<'JSON'
+cat > "$RES/app/package.json" <<JSON
 {
-  "name": "openai-codex-high-sierra-runtime-compat",
-  "version": "1.0.0",
-  "main": "main.cjs"
+  "name": "openai-codex-electron",
+  "productName": "Codex",
+  "author": "OpenAI",
+  "version": "$source_version",
+  "description": "Codex",
+  "main": "main.cjs",
+  "codexBuildFlavor": "prod",
+  "codexBuildNumber": "$source_build"
 }
 JSON
 cat > "$RES/app/main.cjs" <<'JS'
