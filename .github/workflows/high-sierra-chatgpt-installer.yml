@@ -1,5 +1,7 @@
 name: Verify ChatGPT High Sierra installer
 
+# Exact installer path verification
+
 on:
   push:
     branches: [main]
