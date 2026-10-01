@@ -1,10 +1,9 @@
 name: Verify ChatGPT High Sierra installer
 
-# Exact installer path verification
-
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - "scripts/install-chatgpt-high-sierra.sh"
       - ".github/workflows/high-sierra-chatgpt-installer.yml"
@@ -24,13 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build exact compatibility app through installer
-        env:
-          CHATGPT_HIGH_SIERRA_INSTALL_BASE: ${{ runner.temp }}/Applications
-          CHATGPT_HIGH_SIERRA_NO_LAUNCH: "1"
-        run: bash scripts/install-chatgpt-high-sierra.sh | tee "$RUNNER_TEMP/install.log"
+      - name: Install real OpenAI compatibility app
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CHATGPT_HIGH_SIERRA_INSTALL_BASE="$RUNNER_TEMP/Applications"
+          export CHATGPT_HIGH_SIERRA_NO_LAUNCH=1
+          bash scripts/install-chatgpt-high-sierra.sh | tee "$RUNNER_TEMP/install.log"
 
-      - name: Verify bundle identity and deployment target
+      - name: Verify bundle and real renderer
         shell: bash
         run: |
           set -euo pipefail
@@ -39,29 +40,17 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = "com.openai.codex"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist")" = "10.13"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")" = "Electron"
-          file "$app/Contents/MacOS/Electron"
-          otool -l "$app/Contents/MacOS/Electron" | grep -A8 -E 'LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX' | head -30
-
-          # The real OpenAI app payload and real bundled Codex must both exist.
           test -f "$app/Contents/Resources/app.asar"
           test -x "$app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
           "$app/Contents/Resources/codex-cli/bin/codex" --version
-
-      - name: Require a real renderer from installed app
-        shell: bash
-        run: |
-          set -euo pipefail
-          app="$RUNNER_TEMP/Applications/ChatGPT.app"
-          out="$RUNNER_TEMP/chatgpt-installed-stdout.log"
-          err="$RUNNER_TEMP/chatgpt-installed-stderr.log"
-          cdp="$RUNNER_TEMP/chatgpt-installed-cdp.json"
 
           "$app/Contents/MacOS/Electron" \
             --remote-debugging-port=9231 \
             --disable-gpu \
             --no-sandbox \
             --enable-logging=stderr \
-            >"$out" 2>"$err" &
+            >"$RUNNER_TEMP/chatgpt-installed-stdout.log" \
+            2>"$RUNNER_TEMP/chatgpt-installed-stderr.log" &
           pid=$!
 
           cleanup() {
@@ -75,8 +64,15 @@ jobs:
             if ! kill -0 "$pid" >/dev/null 2>&1; then
               break
             fi
-            if curl -fsS "http://127.0.0.1:9231/json/list" -o "$cdp"; then
-              if python3 -c 'import json,sys; items=json.load(open(sys.argv[1])); pages=[x for x in items if x.get("type") in ("page","webview")]; print(json.dumps([{"type":x.get("type"),"title":x.get("title"),"url":x.get("url")} for x in pages], indent=2)); raise SystemExit(0 if pages else 1)' "$cdp"; then
+            if curl -fsS "http://127.0.0.1:9231/json/list" -o "$RUNNER_TEMP/chatgpt-installed-cdp.json"; then
+              if python3 - "$RUNNER_TEMP/chatgpt-installed-cdp.json" <<'PY'
+import json, sys
+items = json.load(open(sys.argv[1]))
+pages = [x for x in items if x.get("type") in ("page", "webview")]
+print(json.dumps([{"type": x.get("type"), "title": x.get("title"), "url": x.get("url")} for x in pages], indent=2))
+raise SystemExit(0 if pages else 1)
+PY
+              then
                 captured=true
                 break
               fi
@@ -86,18 +82,6 @@ jobs:
 
           if [[ "$captured" != "true" ]]; then
             echo "Installed real ChatGPT app did not expose a renderer." >&2
-            tail -300 "$err" >&2 || true
+            tail -300 "$RUNNER_TEMP/chatgpt-installed-stderr.log" >&2 || true
             exit 1
           fi
-
-      - name: Upload installer verification logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: chatgpt-high-sierra-installer-verification
-          path: |
-            ${{ runner.temp }}/install.log
-            ${{ runner.temp }}/chatgpt-installed-stdout.log
-            ${{ runner.temp }}/chatgpt-installed-stderr.log
-            ${{ runner.temp }}/chatgpt-installed-cdp.json
-          if-no-files-found: warn
