@@ -192,6 +192,35 @@ const Module = require("node:module");
 const electron = require("electron");
 const originalLoad = Module._load;
 
+const originalNodeExtension = Module._extensions[".node"];
+if (originalNodeExtension) {
+  Module._extensions[".node"] = function (module, filename) {
+    dump("native-addon-load-start", filename);
+    try {
+      const result = originalNodeExtension(module, filename);
+      dump("native-addon-load-ok", filename);
+      return result;
+    } catch (error) {
+      dump("native-addon-load-error", {
+        filename,
+        error: error && (error.stack || error),
+      });
+      throw error;
+    }
+  };
+}
+
+if (electron && electron.dialog) {
+  for (const method of ["showErrorBox", "showMessageBox", "showMessageBoxSync"]) {
+    if (typeof electron.dialog[method] !== "function") continue;
+    const original = electron.dialog[method].bind(electron.dialog);
+    electron.dialog[method] = (...args) => {
+      dump("electron-dialog-" + method, args);
+      return original(...args);
+    };
+  }
+}
+
 function wrapLoggerNamespace(namespace, request) {
   if (!namespace || typeof namespace !== "object") return;
   if (typeof namespace.getLogger !== "function") return;
