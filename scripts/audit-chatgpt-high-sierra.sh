@@ -49,6 +49,10 @@ MAIN="$(find "$MACOS" -type f -perm +111 -maxdepth 1 -print -quit)"
   echo
   echo "## Updater-related Info.plist keys"
   plutil -p "$INFO" | grep -Ei 'sparkle|feed|update|SU[A-Z]' || true
+
+  echo
+  echo "## Electron / ASAR / helper Info.plist keys"
+  plutil -p "$INFO" | grep -Ei 'electron|asar|integrity|helper|framework|crash|team|bundle' || true
   echo
   echo "## Main executable"
   file "$MAIN"
