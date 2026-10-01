@@ -1,0 +1,106 @@
+name: Validate High Sierra ChatGPT installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/install-chatgpt-high-sierra.sh"
+      - ".github/workflows/high-sierra-installer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: high-sierra-chatgpt-installer
+  cancel-in-progress: true
+
+jobs:
+  validate-real-app-and-cli:
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble from official OpenAI app and install bundled Codex CLI
+        env:
+          CHATGPT_HIGH_SIERRA_INSTALL_BASE: ${{ runner.temp }}/Applications
+          CHATGPT_HIGH_SIERRA_NO_LAUNCH: "1"
+        run: bash scripts/install-chatgpt-high-sierra.sh
+
+      - name: Verify real OpenAI payload and Codex CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/Applications/ChatGPT.app"
+          test -d "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = "com.openai.codex"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")" = "10.13"
+
+          CODEX="$APP/Contents/Resources/codex-cli/bin/codex"
+          "$CODEX" --version | tee "$RUNNER_TEMP/codex-version.txt"
+          "$CODEX" --help >/dev/null
+
+          APP_ASAR="$APP/Contents/Resources/app.asar"
+          test -f "$APP_ASAR"
+          shasum -a 256 "$APP_ASAR" | tee "$RUNNER_TEMP/app-asar.sha256"
+
+      - name: Require ChatGPT renderer to start
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/Applications/ChatGPT.app"
+          LOG="$RUNNER_TEMP/chatgpt-installer-stderr.log"
+          CDP="$RUNNER_TEMP/chatgpt-installer-cdp.json"
+
+          CODEX_ELECTRON_USER_DATA_PATH="$RUNNER_TEMP/chatgpt-user-data"           ELECTRON_ENABLE_LOGGING=1           "$APP/Contents/MacOS/Electron"             --disable-gpu             --no-sandbox             --remote-debugging-port=9230             >"$RUNNER_TEMP/chatgpt-installer-stdout.log" 2>"$LOG" &
+          pid=$!
+
+          cleanup() {
+            kill "$pid" >/dev/null 2>&1 || true
+            wait "$pid" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          captured=false
+          for _ in {1..30}; do
+            if ! kill -0 "$pid" >/dev/null 2>&1; then
+              echo "ChatGPT exited before renderer validation" >&2
+              cat "$LOG" >&2 || true
+              exit 1
+            fi
+            if curl -fsS "http://127.0.0.1:9230/json/list" -o "$CDP"; then
+              if python3 - "$CDP" <<'PY'
+import json, sys
+data=json.load(open(sys.argv[1]))
+raise SystemExit(0 if any(x.get("type") == "page" for x in data) else 1)
+PY
+              then
+                captured=true
+                break
+              fi
+            fi
+            sleep 1
+          done
+
+          if [[ "$captured" != "true" ]]; then
+            echo "No ChatGPT renderer target appeared" >&2
+            cat "$CDP" >&2 2>/dev/null || true
+            cat "$LOG" >&2 || true
+            exit 1
+          fi
+
+          cat "$CDP"
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: high-sierra-chatgpt-installer-validation
+          path: |
+            ${{ runner.temp }}/codex-version.txt
+            ${{ runner.temp }}/app-asar.sha256
+            ${{ runner.temp }}/chatgpt-installer-cdp.json
+            ${{ runner.temp }}/chatgpt-installer-stdout.log
+            ${{ runner.temp }}/chatgpt-installer-stderr.log
+          if-no-files-found: warn
