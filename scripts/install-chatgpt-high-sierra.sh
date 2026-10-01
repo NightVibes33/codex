@@ -245,6 +245,10 @@ echo "  Bundle ID: com.openai.codex"
 echo "  Path: $DEST"
 echo "  Codex CLI: $codex_version"
 echo "  Codex command: $LOCAL_BIN/codex"
+if [[ "${CHATGPT_HIGH_SIERRA_NO_LAUNCH:-0}" == "1" ]]; then
+  exit 0
+fi
+
 echo
 echo "Launching ChatGPT..."
 open "$DEST"
