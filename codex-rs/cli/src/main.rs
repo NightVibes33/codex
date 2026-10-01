@@ -991,7 +991,7 @@ fn macos_needs_legacy_backport() -> bool {
         .and_then(|part| part.parse::<u32>().ok())
         .unwrap_or(0);
 
-    matches!(major, 11) || (major == 10 && (13..=15).contains(&minor))
+    matches!(major, 11 | 12) || (major == 10 && (13..=15).contains(&minor))
 }
 
 #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
