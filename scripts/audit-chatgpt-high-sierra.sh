@@ -75,11 +75,13 @@ MAIN="$(find "$MACOS" -type f -perm +111 -maxdepth 1 -print -quit)"
     done
   fi
   echo
-  if [[ -x "$RES/codex" ]]; then
+  bundled_codex="$(find "$RES/codex-cli" -type f -name codex -perm +111 -print -quit 2>/dev/null || true)"
+  if [[ -n "$bundled_codex" ]]; then
     echo "Bundled Codex:"
-    file "$RES/codex"
-    "$RES/codex" --version 2>&1 || true
-    otool -l "$RES/codex" | awk '
+    echo "path: ${bundled_codex#$APP/}"
+    file "$bundled_codex"
+    "$bundled_codex" --version 2>&1 || true
+    otool -l "$bundled_codex" | awk '
       /cmd LC_BUILD_VERSION/ {show=1; print; next}
       /cmd LC_VERSION_MIN_MACOSX/ {show=1; print; next}
       show && /^(      cmd|  cmdsize)/ {show=0}
