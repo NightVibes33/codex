@@ -389,14 +389,18 @@ run_probe() {
   CODEX_HOME="$TMP/codex-home" \
   ELECTRON_ENABLE_LOGGING=1 \
   ELECTRON_ENABLE_STACK_DUMPING=1 \
-  "$@" --enable-logging=stderr --v=1 --disable-gpu --no-sandbox >"$stdout" 2>"$stderr" &
+  "$@" --enable-logging=stderr --v=1 --disable-gpu --no-sandbox --remote-debugging-port=9229 >"$stdout" 2>"$stderr" &
   probe_pid=$!
   set -e
 
   survived=false
+  cdp_captured=false
   for _ in {1..20}; do
     if ! kill -0 "$probe_pid" >/dev/null 2>&1; then
       break
+    fi
+    if [[ "$cdp_captured" == "false" ]] && curl -fsS "http://127.0.0.1:9229/json/list" > "$OUT/${label}-cdp.json" 2>/dev/null; then
+      cdp_captured=true
     fi
     sleep 1
   done
@@ -417,6 +421,7 @@ run_probe() {
     echo "label=$label"
     echo "exit_code=$exit_code"
     echo "survived_20s=$survived"
+    echo "renderer_cdp_captured=$cdp_captured"
   } > "$status_file"
 }
 
