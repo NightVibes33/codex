@@ -212,6 +212,30 @@ fi
 ditto "$COMPAT_APP" "$DEST"
 xattr -dr com.apple.quarantine "$DEST" >/dev/null 2>&1 || true
 
+# Expose the exact Codex CLI that ships inside the official OpenAI app package.
+# Its x86_64 native Codex binary, code-mode host, and rg are linked with a
+# macOS 10.12 deployment target, so High Sierra 10.13 is above their Mach-O floor.
+OFFICIAL_CODEX="$DEST/Contents/Resources/codex-cli/bin/codex"
+if [[ ! -x "$OFFICIAL_CODEX" ]]; then
+  echo "Official bundled Codex CLI was not found at: $OFFICIAL_CODEX" >&2
+  exit 1
+fi
+
+LOCAL_BIN="$HOME/.local/bin"
+mkdir -p "$LOCAL_BIN"
+ln -sfn "$OFFICIAL_CODEX" "$LOCAL_BIN/codex"
+
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+for profile in "$HOME/.bash_profile" "$HOME/.profile"; do
+  if [[ ! -f "$profile" ]] || ! grep -F "$PATH_LINE" "$profile" >/dev/null 2>&1; then
+    printf '\n%s\n' "$PATH_LINE" >> "$profile"
+  fi
+done
+
+# Verify the real packaged CLI itself starts before calling the install complete.
+codex_version="$("$OFFICIAL_CODEX" --version)"
+"$OFFICIAL_CODEX" --help >/dev/null
+
 echo
 echo "Installed real OpenAI ChatGPT/Codex compatibility app:"
 echo "  OpenAI version: $source_version ($source_build)"
@@ -219,6 +243,8 @@ echo "  Electron runtime: $ELECTRON_VERSION"
 echo "  macOS target: $minos"
 echo "  Bundle ID: com.openai.codex"
 echo "  Path: $DEST"
+echo "  Codex CLI: $codex_version"
+echo "  Codex command: $LOCAL_BIN/codex"
 echo
 echo "Launching ChatGPT..."
 open "$DEST"
