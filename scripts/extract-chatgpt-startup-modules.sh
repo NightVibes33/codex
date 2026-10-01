@@ -58,49 +58,35 @@ copy_matches() {
   [[ "$found" == "1" ]] || { echo "no ASAR members matched: $regex" >&2; exit 1; }
 }
 
-copy_matches '^/?package\.json
+copy_matches '^/?package\.json$'
+copy_matches 'application-network-startup-.*\.js$'
 copy_matches 'startup-requirements-.*\.js$'
 copy_matches 'desktop-open-path-queue-.*\.js$'
 copy_matches '/?\.vite/build/bootstrap-[^/]+\.js$'
 copy_matches '/?\.vite/build/main-[^/]+\.js$'
 copy_matches 'early-bootstrap\.js$'
 
-echo "--- extracted files ---"
-wc -c "$OUT"/*.js
-echo "--- startup requirement symbols ---"
-grep -hEo 'initializeNodeNetworkPermissions|configRequirements/read|application/network|setPermission[A-Za-z]+|Desktop network requirements prevented startup|app\.exit\([^)]*\)' "$OUT"/*.js | sort -u || true
-
-copy_matches 'build-flavor-.*\.js
-copy_matches 'startup-requirements-.*\.js$'
-copy_matches 'desktop-open-path-queue-.*\.js$'
-copy_matches '/?\.vite/build/bootstrap-[^/]+\.js$'
-copy_matches '/?\.vite/build/main-[^/]+\.js$'
-copy_matches 'early-bootstrap\.js$'
-
-echo "--- extracted files ---"
-wc -c "$OUT"/*.js
-echo "--- startup requirement symbols ---"
-grep -hEo 'initializeNodeNetworkPermissions|configRequirements/read|application/network|setPermission[A-Za-z]+|Desktop network requirements prevented startup|app\.exit\([^)]*\)' "$OUT"/*.js | sort -u || true
-
-copy_matches 'application-network-startup-.*\.js
-copy_matches 'startup-requirements-.*\.js$'
-copy_matches 'desktop-open-path-queue-.*\.js$'
-copy_matches '/?\.vite/build/bootstrap-[^/]+\.js$'
-copy_matches '/?\.vite/build/main-[^/]+\.js$'
-copy_matches 'early-bootstrap\.js$'
+# build-flavor may be folded into another Vite chunk in some releases.
+while IFS= read -r member; do
+  [[ -n "$member" ]] || continue
+  clean="${member#/}"
+  name="$(basename "$clean")"
+  work="$(mktemp -d "$TMP/extract-optional.XXXXXX")"
+  (
+    cd "$work"
+    npx --yes @electron/asar@3 extract-file "$TMP/app.asar" "$clean"
+  )
+  if [[ -s "$work/$name" ]]; then
+    cp "$work/$name" "$OUT/$name"
+    echo "extracted=$clean bytes=$(wc -c < "$OUT/$name")" | tee -a "$OUT/source.txt"
+  fi
+  rm -rf "$work"
+done < <(grep -E 'build-flavor-.*\.js$' "$OUT/asar-list.txt" || true)
 
 echo "--- extracted files ---"
-wc -c "$OUT"/*.js
-echo "--- startup requirement symbols ---"
-grep -hEo 'initializeNodeNetworkPermissions|configRequirements/read|application/network|setPermission[A-Za-z]+|Desktop network requirements prevented startup|app\.exit\([^)]*\)' "$OUT"/*.js | sort -u || true
-
-copy_matches 'startup-requirements-.*\.js$'
-copy_matches 'desktop-open-path-queue-.*\.js$'
-copy_matches '/?\.vite/build/bootstrap-[^/]+\.js$'
-copy_matches '/?\.vite/build/main-[^/]+\.js$'
-copy_matches 'early-bootstrap\.js$'
-
-echo "--- extracted files ---"
-wc -c "$OUT"/*.js
+wc -c "$OUT"/* 2>/dev/null || true
+echo "--- package metadata ---"
+cat "$OUT/package.json" || true
+echo
 echo "--- startup requirement symbols ---"
 grep -hEo 'initializeNodeNetworkPermissions|configRequirements/read|application/network|setPermission[A-Za-z]+|Desktop network requirements prevented startup|app\.exit\([^)]*\)' "$OUT"/*.js | sort -u || true
