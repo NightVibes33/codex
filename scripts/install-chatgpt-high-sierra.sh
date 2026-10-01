@@ -3,6 +3,8 @@ set -euo pipefail
 
 APPCAST_URL="${CHATGPT_X64_APPCAST_URL:-https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml}"
 ELECTRON_VERSION="${CHATGPT_HIGH_SIERRA_ELECTRON_VERSION:-26.6.10}"
+NATIVE_TAG="${CHATGPT_HIGH_SIERRA_NATIVE_TAG:-high-sierra-electron26-native}"
+NATIVE_BASE_URL="${CHATGPT_HIGH_SIERRA_NATIVE_BASE_URL:-https://github.com/NightVibes33/codex/releases/download/$NATIVE_TAG}"
 INSTALL_BASE="${CHATGPT_HIGH_SIERRA_INSTALL_BASE:-$HOME/Applications}"
 DEST="$INSTALL_BASE/ChatGPT.app"
 TMP="$(mktemp -d -t chatgpt-high-sierra.XXXXXX)"
@@ -161,6 +163,52 @@ mv "$RES/app.asar" "$RES/original.asar"
 if [[ -d "$RES/app.asar.unpacked" ]]; then
   mv "$RES/app.asar.unpacked" "$RES/original.asar.unpacked"
 fi
+
+# OpenAI's current native addons are compiled for the Owl/Chromium 154 ABI.
+# Electron 26 embeds Node 18 (NODE_MODULE_VERSION 116), so use the rolling,
+# checksum-verified x86_64 compatibility pack built from the same package
+# versions against Electron 26 headers.
+if [[ ! -d "$RES/original.asar.unpacked" ]]; then
+  echo "Official OpenAI app.asar.unpacked is missing; native compatibility modules cannot be installed." >&2
+  exit 1
+fi
+
+native_archive="electron26-native-darwin-x64.tar.gz"
+echo "Downloading Electron 26 native compatibility modules..."
+curl -fL --retry 4 --retry-delay 2   "$NATIVE_BASE_URL/$native_archive"   -o "$TMP/$native_archive"
+curl -fL --retry 4 --retry-delay 2   "$NATIVE_BASE_URL/SHA256SUMS"   -o "$TMP/native-SHA256SUMS"
+
+native_expected="$(awk -v asset="$native_archive" '$2 == asset || $2 == "*" asset { print $1; exit }' "$TMP/native-SHA256SUMS")"
+native_actual="$(shasum -a 256 "$TMP/$native_archive" | awk '{print $1}')"
+if [[ -z "$native_expected" || "$native_expected" != "$native_actual" ]]; then
+  echo "Electron 26 native compatibility pack checksum verification failed." >&2
+  exit 1
+fi
+
+mkdir -p "$TMP/native-pack"
+tar -xzf "$TMP/$native_archive" -C "$TMP/native-pack"
+
+sqlite_dst="$RES/original.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+pty_dst="$RES/original.asar.unpacked/node_modules/node-pty/build/Release/pty.node"
+spawn_dst="$RES/original.asar.unpacked/node_modules/node-pty/build/Release/spawn-helper"
+
+for required in "$sqlite_dst" "$pty_dst" "$spawn_dst"; do
+  if [[ ! -e "$required" ]]; then
+    echo "Expected OpenAI native module path is missing: $required" >&2
+    exit 1
+  fi
+done
+
+cp "$TMP/native-pack/better-sqlite3/build/Release/better_sqlite3.node" "$sqlite_dst"
+cp "$TMP/native-pack/node-pty/build/Release/pty.node" "$pty_dst"
+cp "$TMP/native-pack/node-pty/build/Release/spawn-helper" "$spawn_dst"
+chmod 0755 "$spawn_dst"
+
+# Preserve OpenAI's direct Resources/app.asar.unpacked lookups while keeping
+# Electron 26 pointed at the compatibility bootstrap in Resources/app.
+rm -rf "$RES/app.asar.unpacked"
+ln -s "original.asar.unpacked" "$RES/app.asar.unpacked"
+
 rm -rf "$RES/app"
 mkdir -p "$RES/app"
 cat > "$RES/app/package.json" <<JSON
