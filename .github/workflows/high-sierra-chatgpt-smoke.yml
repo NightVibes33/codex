@@ -29,6 +29,5 @@ jobs:
             ${{ runner.temp }}/chatgpt-electron26-smoke/build-info.txt
             ${{ runner.temp }}/chatgpt-electron26-smoke/app-asar-sha256.txt
             ${{ runner.temp }}/chatgpt-electron26-smoke/real-app-package.json
-            ${{ runner.temp }}/chatgpt-electron26-smoke/stdout.log
-            ${{ runner.temp }}/chatgpt-electron26-smoke/stderr.log
+            ${{ runner.temp }}/chatgpt-electron26-smoke/*
           if-no-files-found: warn
