@@ -64,4 +64,7 @@ verify_minos "$OUT/node-pty/build/Release/spawn-helper"
 } > "$OUT/BUILD-INFO.txt"
 
 tar -C "$OUT" -czf "$OUT/electron26-native-darwin-x64.tar.gz"   better-sqlite3 node-pty BUILD-INFO.txt
-shasum -a 256 "$OUT/electron26-native-darwin-x64.tar.gz" > "$OUT/SHA256SUMS"
+(
+  cd "$OUT"
+  shasum -a 256 electron26-native-darwin-x64.tar.gz > SHA256SUMS
+)
