@@ -83,10 +83,15 @@ fn run_high_sierra_app(workspace: PathBuf) -> anyhow::Result<()> {
         }
     }
 
+    let workspace_string = workspace.as_os_str().to_string_lossy();
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    serializer.append_pair("path", workspace_string.as_ref());
+    let deep_link = format!("codex://threads/new?{}", serializer.finish());
+
     let status = std::process::Command::new("/usr/bin/open")
         .arg("-a")
         .arg(&app_path)
-        .arg(&workspace)
+        .arg(&deep_link)
         .status()?;
     if !status.success() {
         anyhow::bail!(
