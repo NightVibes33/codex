@@ -151,20 +151,37 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 # Prove the OpenAI application payload itself was not replaced.
 shasum -a 256 "$SOURCE_RES/app.asar" "$APP/Contents/Resources/app.asar" > "$OUT/app-asar-sha256.txt"
 
-# Read only the two real OpenAI ASAR files needed for diagnostics. Avoid
-# extracting the entire application payload on every compatibility smoke.
-npx --yes @electron/asar@3 extract-file "$SOURCE_RES/app.asar" package.json \
-  > "$OUT/real-app-package.json"
-npx --yes @electron/asar@3 extract-file "$SOURCE_RES/app.asar" .vite/build/early-bootstrap.js \
-  > "$TMP/early-bootstrap.js"
+# Read only the real OpenAI ASAR files needed for diagnostics. Targeted extraction avoids touching unrelated app.asar.unpacked entries.
+extract_asar_member() {
+  local archive="$1"
+  local member="$2"
+  local destination="$3"
+  local work
+  local name
+  work="$(mktemp -d "$TMP/asar-one.XXXXXX")"
+  name="$(basename "$member")"
+  (
+    cd "$work"
+    npx --yes @electron/asar@3 extract-file "$archive" "$member"
+  )
+  [[ -s "$work/$name" ]] || {
+    echo "targeted ASAR extraction failed: $member" >&2
+    find "$work" -maxdepth 3 -type f -print >&2 || true
+    exit 1
+  }
+  cp "$work/$name" "$destination"
+  rm -rf "$work"
+}
+
+extract_asar_member "$SOURCE_RES/app.asar" package.json "$OUT/real-app-package.json"
+extract_asar_member "$SOURCE_RES/app.asar" .vite/build/early-bootstrap.js "$TMP/early-bootstrap.js"
 npx --yes @electron/asar@3 list "$SOURCE_RES/app.asar" > "$TMP/asar-list.txt"
 while IFS= read -r module_path; do
   clean_path="${module_path#/}"
   case "$clean_path" in
     *application-network-startup-*.js|*startup-requirements-*.js)
       out_name="$(basename "$clean_path")"
-      npx --yes @electron/asar@3 extract-file "$SOURCE_RES/app.asar" "$clean_path" \
-        > "$OUT/$out_name"
+      extract_asar_member "$SOURCE_RES/app.asar" "$clean_path" "$OUT/$out_name"
       ;;
   esac
 done < "$TMP/asar-list.txt"
