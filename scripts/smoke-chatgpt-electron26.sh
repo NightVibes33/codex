@@ -157,6 +157,17 @@ npx --yes @electron/asar@3 extract-file "$SOURCE_RES/app.asar" package.json \
   > "$OUT/real-app-package.json"
 npx --yes @electron/asar@3 extract-file "$SOURCE_RES/app.asar" .vite/build/early-bootstrap.js \
   > "$TMP/early-bootstrap.js"
+npx --yes @electron/asar@3 list "$SOURCE_RES/app.asar" > "$TMP/asar-list.txt"
+while IFS= read -r module_path; do
+  clean_path="${module_path#/}"
+  case "$clean_path" in
+    *application-network-startup-*.js|*startup-requirements-*.js)
+      out_name="$(basename "$clean_path")"
+      npx --yes @electron/asar@3 extract-file "$SOURCE_RES/app.asar" "$clean_path" \
+        > "$OUT/$out_name"
+      ;;
+  esac
+done < "$TMP/asar-list.txt"
 
 python3 - "$TMP/early-bootstrap.js" "$OUT/early-bootstrap-signals.txt" <<'PY'
 import re, sys
