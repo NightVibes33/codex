@@ -27,6 +27,7 @@ jobs:
         with:
           node-version: "22"
       - name: Build Electron 26 native compatibility pack
+        # Rebuild OpenAI's Owl-targeted native addons for Electron 26 / ABI 116.
         run: bash scripts/build-electron26-native-modules.sh "$RUNNER_TEMP/native"
       - name: Inspect native binaries
         run: |
