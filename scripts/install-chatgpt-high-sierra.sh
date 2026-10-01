@@ -36,12 +36,27 @@ fi
 
 mkdir -p "$MOUNT" "$SOURCE_DIR" "$ELECTRON_DIR" "$INSTALL_BASE"
 
+if [[ -n "${CHATGPT_HIGH_SIERRA_PYTHON:-}" ]]; then
+  PYTHON_BIN="$CHATGPT_HIGH_SIERRA_PYTHON"
+elif [[ -x /usr/bin/python3 ]]; then
+  PYTHON_BIN=/usr/bin/python3
+elif [[ -x /usr/bin/python ]]; then
+  PYTHON_BIN=/usr/bin/python
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="$(command -v python3)"
+elif command -v python >/dev/null 2>&1; then
+  PYTHON_BIN="$(command -v python)"
+else
+  echo "Python is required to parse the OpenAI appcast and plist metadata." >&2
+  exit 1
+fi
+
 echo "Finding the latest official OpenAI Intel ChatGPT build..."
 curl -fsSL --retry 4 --retry-delay 2 \
   -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 Safari/605.1.15" \
   "$APPCAST_URL" -o "$TMP/appcast.xml"
 
-SOURCE_URL="$(/usr/bin/python - "$TMP/appcast.xml" <<'PY'
+SOURCE_URL="$("$PYTHON_BIN" - "$TMP/appcast.xml" <<'PY'
 from __future__ import print_function
 import sys
 try:
@@ -108,7 +123,7 @@ fi
 ditto "$ELECTRON_DIR/Electron.app" "$COMPAT_APP"
 ditto "$SOURCE_APP/Contents/Resources" "$COMPAT_APP/Contents/Resources"
 
-/usr/bin/python - \
+"$PYTHON_BIN" - \
   "$ELECTRON_DIR/Electron.app/Contents/Info.plist" \
   "$SOURCE_APP/Contents/Info.plist" \
   "$COMPAT_APP/Contents/Info.plist" <<'PY'
