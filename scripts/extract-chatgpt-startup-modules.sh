@@ -12,9 +12,9 @@ curl -fsSL --retry 4 --retry-delay 2 -A "$ua" "$APPCAST_URL" -o "$TMP/appcast.xm
 
 SOURCE_URL="$(python3 - "$TMP/appcast.xml" <<'PY'
 import sys, xml.etree.ElementTree as ET
-root=ET.parse(sys.argv[1]).getroot()
+root = ET.parse(sys.argv[1]).getroot()
 for item in root.findall(".//item"):
-    enc=item.find("enclosure")
+    enc = item.find("enclosure")
     if enc is not None and enc.attrib.get("url"):
         print(enc.attrib["url"])
         break
@@ -34,38 +34,28 @@ EXTRACTED="$TMP/asar"
 mkdir -p "$EXTRACTED"
 npx --yes @electron/asar@3 extract "$TMP/app.asar" "$EXTRACTED"
 
-for pattern in 'application-network-startup-.*\.js
-echo "--- startup-requirements ---"
-cat "$OUT"/startup-requirements-*.js 2>/dev/null || true
-echo
-echo "--- application-network-startup ---"
-cat "$OUT"/application-network-startup-*.js 2>/dev/null || true
- 'startup-requirements-.*\.js
-echo "--- startup-requirements ---"
-cat "$OUT"/startup-requirements-*.js 2>/dev/null || true
-echo
-echo "--- application-network-startup ---"
-cat "$OUT"/application-network-startup-*.js 2>/dev/null || true
- 'early-bootstrap\.js
-echo "--- startup-requirements ---"
-cat "$OUT"/startup-requirements-*.js 2>/dev/null || true
-echo
-echo "--- application-network-startup ---"
-cat "$OUT"/application-network-startup-*.js 2>/dev/null || true
-; do
-  while IFS= read -r p; do
-    clean="${p#/}"
-    [[ -n "$clean" ]] || continue
+copy_matches() {
+  local regex="$1"
+  local found=0
+  while IFS= read -r member; do
+    [[ -n "$member" ]] || continue
+    local clean="${member#/}"
+    local src="$EXTRACTED/$clean"
+    local name
     name="$(basename "$clean")"
-    src="$EXTRACTED/$clean"
     [[ -s "$src" ]] || { echo "extracted ASAR member is missing/empty: $clean" >&2; exit 1; }
     cp "$src" "$OUT/$name"
-    echo "extracted=$clean" | tee -a "$OUT/source.txt"
-  done < <(grep -E "$pattern" "$OUT/asar-list.txt" || true)
-done
+    echo "extracted=$clean bytes=$(wc -c < "$OUT/$name")" | tee -a "$OUT/source.txt"
+    found=1
+  done < <(grep -E "$regex" "$OUT/asar-list.txt" || true)
+  [[ "$found" == "1" ]] || { echo "no ASAR members matched: $regex" >&2; exit 1; }
+}
 
-echo "--- startup-requirements ---"
-cat "$OUT"/startup-requirements-*.js 2>/dev/null || true
-echo
-echo "--- application-network-startup ---"
-cat "$OUT"/application-network-startup-*.js 2>/dev/null || true
+copy_matches 'application-network-startup-.*\.js$'
+copy_matches 'startup-requirements-.*\.js$'
+copy_matches 'early-bootstrap\.js$'
+
+echo "--- extracted files ---"
+wc -c "$OUT"/*.js
+echo "--- startup requirement symbols ---"
+grep -hEo 'initializeNodeNetworkPermissions|configRequirements/read|application/network|setPermission[A-Za-z]+|Desktop network requirements prevented startup|app\.exit\([^)]*\)' "$OUT"/*.js | sort -u || true
