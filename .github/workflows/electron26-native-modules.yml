@@ -26,8 +26,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
       - name: Build Electron 26 native compatibility pack
         run: bash scripts/build-electron26-native-modules.sh "$RUNNER_TEMP/native"
       - name: Inspect native binaries
