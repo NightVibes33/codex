@@ -23,7 +23,12 @@ with open(sys.argv[2],"w") as f:
 PY
 
 unzip -p "$ZIP" "$APP_ROOT/Contents/Resources/app.asar" > "$TMP/app.asar"
-npx --yes @electron/asar@3 extract-file "$TMP/app.asar" package.json > "$OUT/package.json"
+mkdir -p "$TMP/asar-meta"
+(
+  cd "$TMP/asar-meta"
+  npx --yes @electron/asar@3 extract-file "$TMP/app.asar" package.json >/dev/null
+)
+cp "$TMP/asar-meta/package.json" "$OUT/package.json"
 
 python3 - "$OUT/package.json" "$OUT/summary.txt" <<'PY'
 import json,sys
