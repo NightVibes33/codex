@@ -30,9 +30,6 @@ ASAR_PATH="$(unzip -Z1 "$TMP/ChatGPT.zip" | grep -E '/Contents/Resources/app\.as
 unzip -p "$TMP/ChatGPT.zip" "$ASAR_PATH" > "$TMP/app.asar"
 
 npx --yes @electron/asar@3 list "$TMP/app.asar" > "$OUT/asar-list.txt"
-EXTRACTED="$TMP/asar"
-mkdir -p "$EXTRACTED"
-npx --yes @electron/asar@3 extract "$TMP/app.asar" "$EXTRACTED"
 
 copy_matches() {
   local regex="$1"
@@ -40,11 +37,21 @@ copy_matches() {
   while IFS= read -r member; do
     [[ -n "$member" ]] || continue
     local clean="${member#/}"
-    local src="$EXTRACTED/$clean"
     local name
+    local work
     name="$(basename "$clean")"
-    [[ -s "$src" ]] || { echo "extracted ASAR member is missing/empty: $clean" >&2; exit 1; }
-    cp "$src" "$OUT/$name"
+    work="$(mktemp -d "$TMP/extract-one.XXXXXX")"
+    (
+      cd "$work"
+      npx --yes @electron/asar@3 extract-file "$TMP/app.asar" "$clean"
+    )
+    [[ -s "$work/$name" ]] || {
+      echo "targeted ASAR extraction is missing/empty: $clean" >&2
+      find "$work" -maxdepth 3 -type f -print >&2 || true
+      exit 1
+    }
+    cp "$work/$name" "$OUT/$name"
+    rm -rf "$work"
     echo "extracted=$clean bytes=$(wc -c < "$OUT/$name")" | tee -a "$OUT/source.txt"
     found=1
   done < <(grep -E "$regex" "$OUT/asar-list.txt" || true)
