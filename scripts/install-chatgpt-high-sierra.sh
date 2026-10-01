@@ -65,12 +65,12 @@ case "$SOURCE_URL" in
   *.zip)
     curl -fL --retry 4 --retry-delay 2 "$SOURCE_URL" -o "$TMP/ChatGPT.zip"
     ditto -x -k "$TMP/ChatGPT.zip" "$SOURCE_DIR"
-    SOURCE_APP="$(find "$SOURCE_DIR" -maxdepth 4 -type d -name 'ChatGPT.app' -print -quit)"
+    SOURCE_APP="$(/usr/bin/find "$SOURCE_DIR" -type d -name 'ChatGPT.app' -print | /usr/bin/head -n 1)"
     ;;
   *.dmg)
     curl -fL --retry 4 --retry-delay 2 "$SOURCE_URL" -o "$TMP/ChatGPT.dmg"
     hdiutil attach "$TMP/ChatGPT.dmg" -mountpoint "$MOUNT" -nobrowse -readonly >/dev/null
-    SOURCE_APP="$(find "$MOUNT" -maxdepth 2 -type d -name 'ChatGPT.app' -print -quit)"
+    SOURCE_APP="$(/usr/bin/find "$MOUNT" -type d -name 'ChatGPT.app' -print | /usr/bin/head -n 1)"
     ;;
   *)
     echo "Unsupported official ChatGPT source URL: $SOURCE_URL" >&2
